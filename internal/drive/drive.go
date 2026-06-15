@@ -1,11 +1,7 @@
 // Package drive is xftp's SharePoint document-library client: it resolves a
 // site URL to a Graph drive, then exposes FTP-shaped operations over that drive
-// (list, download, upload, mkdir, remove, move).
-//
-// STATUS: stub. ResolveDrive and List are implemented so the auth + read path
-// can be exercised end to end. The mutating operations (Download, Upload,
-// Mkdir, Remove, Move) are stubbed with their exact Graph endpoints documented
-// inline; fill them in next.
+// — Stat, List, Download, Upload, Mkdir, Remove, Move. Uploads are simple-PUT
+// only (<=250MB); larger files will need an upload session.
 package drive
 
 import (
@@ -19,9 +15,6 @@ import (
 
 	"github.com/excelano/xftp/internal/spauth"
 )
-
-// ErrNotImplemented marks the drive operations still to be written.
-var ErrNotImplemented = fmt.Errorf("not implemented yet")
 
 // Drive is a resolved SharePoint document library the session operates on.
 // SourceURL is kept so a future REPL "refresh"/reconnect can re-bind without
@@ -234,48 +227,137 @@ func (d *Drive) List(ctx context.Context, g *spauth.GraphClient, path string) ([
 	return items, nil
 }
 
+// simpleUploadMax is Graph's ceiling for a single PUT to /content. Above this
+// an upload session is required; xftp rejects oversized files for now rather
+// than silently truncating.
+const simpleUploadMax = 250 * 1024 * 1024
+
+// Stat returns metadata for a single item at the library-relative path ("" or
+// "/" for the drive root). Used to validate "cd" targets and to size downloads.
+func (d *Drive) Stat(ctx context.Context, g *spauth.GraphClient, path string) (Item, error) {
+	body, err := g.Get(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(path)), url.Values{
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file"},
+	})
+	if err != nil {
+		return Item{}, err
+	}
+	var j driveItemJSON
+	if err := json.Unmarshal(body, &j); err != nil {
+		return Item{}, fmt.Errorf("decoding item: %w", err)
+	}
+	return j.toItem(), nil
+}
+
 // Download streams the content of a remote file at the library-relative path
 // into w. (FTP "get".)
-//
-// TODO: GET /drives/{driveID}/root:/{path}:/content — returns a 302 to a
-// pre-authed URL that spauth.GraphClient.Get already follows. Stream the body
-// to w instead of buffering for large files.
 func (d *Drive) Download(ctx context.Context, g *spauth.GraphClient, path string, w io.Writer) error {
-	return ErrNotImplemented
+	rc, err := g.GetStream(ctx, fmt.Sprintf("/drives/%s%s/content", d.DriveID, itemRef(path)))
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	if _, err := io.Copy(w, rc); err != nil {
+		return fmt.Errorf("streaming download: %w", err)
+	}
+	return nil
 }
 
-// Upload writes local content to the library-relative remote path. (FTP "put".)
-//
-// TODO: simple upload is PUT /drives/{driveID}/root:/{path}:/content via
-// spauth.GraphClient.PutRaw for files up to 250MB. Above that, create an upload
-// session: POST .../createUploadSession then PUT byte ranges to its uploadUrl.
+// Upload writes content to the library-relative remote path. (FTP "put".)
+// Simple upload only (<=250MB); larger files need an upload session, which is
+// not yet implemented.
 func (d *Drive) Upload(ctx context.Context, g *spauth.GraphClient, path, contentType string, data []byte) error {
-	return ErrNotImplemented
+	if len(data) > simpleUploadMax {
+		return fmt.Errorf("file is %d bytes; simple upload caps at %d (upload sessions not yet implemented)", len(data), simpleUploadMax)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	_, err := g.PutRaw(ctx, fmt.Sprintf("/drives/%s%s/content", d.DriveID, itemRef(path)), contentType, data)
+	return err
 }
 
-// Mkdir creates a folder at the library-relative path. (FTP "mkdir".)
-//
-// TODO: POST /drives/{driveID}{itemRef(parent)}/children with body
-// {"name": <leaf>, "folder": {}, "@microsoft.graph.conflictBehavior": "fail"}.
-// For a top-level folder the parent ref is "/root".
+// Mkdir creates a folder at the library-relative path. (FTP "mkdir".) Fails if
+// something already exists at that path.
 func (d *Drive) Mkdir(ctx context.Context, g *spauth.GraphClient, path string) error {
-	return ErrNotImplemented
+	parent, leaf := splitPath(path)
+	if leaf == "" {
+		return fmt.Errorf("mkdir: empty folder name")
+	}
+	body := map[string]interface{}{
+		"name":                              leaf,
+		"folder":                            map[string]interface{}{},
+		"@microsoft.graph.conflictBehavior": "fail",
+	}
+	_, err := g.Post(ctx, fmt.Sprintf("/drives/%s%s/children", d.DriveID, itemRef(parent)), body)
+	return err
 }
 
 // Remove deletes the file or folder at the library-relative path. (FTP
-// "delete"/"rmdir".) Caller should confirm before calling — folder deletes are
-// recursive in Graph.
-//
-// TODO: DELETE /drives/{driveID}/root:/{path}: via spauth.GraphClient.Delete.
+// "delete"/"rmdir".) Folder deletes are recursive in Graph, so callers should
+// confirm first.
 func (d *Drive) Remove(ctx context.Context, g *spauth.GraphClient, path string) error {
-	return ErrNotImplemented
+	if strings.Trim(path, "/") == "" {
+		return fmt.Errorf("refusing to delete the drive root")
+	}
+	return g.Delete(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(path)))
 }
 
 // Move renames or relocates an item from src to dst (both library-relative).
-// (FTP "rename".)
-//
-// TODO: PATCH /drives/{driveID}/root:/{src}: with body
-// {"parentReference": {"path": "/drive/root:/<dstParent>"}, "name": <dstLeaf>}.
+// (FTP "rename".) It resolves the destination's parent folder to an item ID and
+// PATCHes the source — the id-based parentReference is more reliable than the
+// path-based form.
 func (d *Drive) Move(ctx context.Context, g *spauth.GraphClient, src, dst string) error {
-	return ErrNotImplemented
+	if strings.Trim(src, "/") == "" {
+		return fmt.Errorf("refusing to move the drive root")
+	}
+	dstParent, dstLeaf := splitPath(dst)
+	if dstLeaf == "" {
+		return fmt.Errorf("move: empty destination name")
+	}
+	parentID, err := d.itemID(ctx, g, dstParent)
+	if err != nil {
+		return fmt.Errorf("resolving destination folder: %w", err)
+	}
+	body := map[string]interface{}{
+		"name":            dstLeaf,
+		"parentReference": map[string]string{"id": parentID},
+	}
+	_, err = g.Patch(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(src)), body)
+	return err
+}
+
+// itemID returns the Graph item ID for a library-relative path ("" or "/" for
+// the root).
+func (d *Drive) itemID(ctx context.Context, g *spauth.GraphClient, path string) (string, error) {
+	body, err := g.Get(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(path)), url.Values{
+		"$select": {"id"},
+	})
+	if err != nil {
+		return "", err
+	}
+	var j struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &j); err != nil {
+		return "", fmt.Errorf("decoding item id: %w", err)
+	}
+	if j.ID == "" {
+		return "", fmt.Errorf("item response missing id")
+	}
+	return j.ID, nil
+}
+
+// splitPath splits a library-relative path into its parent path and leaf name.
+// "Docs/Reports/q1.xlsx" -> ("Docs/Reports", "q1.xlsx"); a top-level name
+// returns an empty parent (the root).
+func splitPath(p string) (parent, leaf string) {
+	clean := strings.Trim(p, "/")
+	if clean == "" {
+		return "", ""
+	}
+	i := strings.LastIndex(clean, "/")
+	if i < 0 {
+		return "", clean
+	}
+	return clean[:i], clean[i+1:]
 }

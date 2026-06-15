@@ -64,6 +64,35 @@ func (g *GraphClient) Get(ctx context.Context, path string, query url.Values) ([
 	})
 }
 
+// GetStream issues an authenticated GET and returns the response body unread,
+// for streaming large downloads straight to disk. Used for file content: a GET
+// to an item's /content endpoint 302s to a pre-authed URL, which the http
+// client follows (dropping our Authorization header on the cross-host hop, as
+// intended). The caller must Close the returned reader. Unlike Get, this does
+// not retry on 429 — content reads through a signed CDN URL, where throttling
+// is rare.
+func (g *GraphClient) GetStream(ctx context.Context, path string) (io.ReadCloser, error) {
+	tok, err := g.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, graphBaseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("graph GET %s returned %d: %s", req.URL.Path, resp.StatusCode, string(body))
+	}
+	return resp.Body, nil
+}
+
 // Patch issues an authenticated PATCH with a JSON body.
 func (g *GraphClient) Patch(ctx context.Context, path string, body interface{}) ([]byte, error) {
 	return g.bodyReq(ctx, http.MethodPatch, path, body)
