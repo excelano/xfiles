@@ -37,20 +37,26 @@ To uninstall, run `curl -fsSL https://raw.githubusercontent.com/excelano/xftp/ma
 
 ## Connecting
 
-Point xftp at a SharePoint site URL. With no library named, it binds the site's default document library; pass `--library` to pick another by its display name.
+Pass a SharePoint URL as the only argument. It can be a site, a document library, or a folder — including the link you copy straight from the browser address bar.
 
 ```
-xftp --site https://contoso.sharepoint.com/sites/Marketing
-xftp --site https://contoso.sharepoint.com/sites/Marketing --library "Project Files"
+xftp https://contoso.sharepoint.com/sites/Marketing
+xftp https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports
+```
+
+xftp works out which library to bind from the URL. A bare site URL binds the site's default document library. A URL that points into a specific library binds that one, and if it points at a folder within the library, xftp drops you straight into that folder. To force a particular library regardless of the URL, name it by its display name:
+
+```
+xftp --library "Project Files" https://contoso.sharepoint.com/sites/Marketing
 ```
 
 Once connected you're at the prompt, which shows your position in the library:
 
 ```
 xftp:/> ls
-xftp:/> cd "Shared Documents"
-xftp:/Shared Documents> get "Q1 Plan.xlsx"
-xftp:/Shared Documents> put report.pdf Archive/report.pdf
+xftp:/> cd Reports
+xftp:/Reports> get "Q1 Plan.xlsx"
+xftp:/Reports> put report.pdf Archive/report.pdf
 ```
 
 Paths may be relative to the current folder or absolute with a leading `/`, and `.`/`..` work as you'd expect. Names containing spaces are double-quoted.

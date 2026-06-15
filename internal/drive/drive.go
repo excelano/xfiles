@@ -1,8 +1,10 @@
 // Package drive is xftp's SharePoint document-library client: it resolves a
-// site URL to a Graph drive, then exposes FTP-shaped operations over that drive
-// — Stat, List, Download, Upload, Mkdir, Remove, Move. Uploads stream from a
-// reader: files up to 250MB go in a single PUT, larger ones through a chunked,
-// resumable upload session.
+// SharePoint URL to a Graph drive, then exposes FTP-shaped operations over that
+// drive — Stat, List, Download, Upload, Mkdir, Remove, Move. The URL may name
+// just the site (binds the default library), a specific library, or a folder
+// deep-linked from the browser (binds that library and seeds the starting
+// folder). Uploads stream from a reader: files up to 250MB go in a single PUT,
+// larger ones through a chunked, resumable upload session.
 package drive
 
 import (
@@ -19,7 +21,8 @@ import (
 
 // Drive is a resolved SharePoint document library the session operates on.
 // SourceURL is kept so a future REPL "refresh"/reconnect can re-bind without
-// re-prompting.
+// re-prompting. StartPath is the library-relative folder the URL pointed into
+// ("" for the library root), used to seed the REPL's working directory.
 type Drive struct {
 	SiteID    string
 	DriveID   string
@@ -27,6 +30,7 @@ type Drive struct {
 	Hostname  string
 	SitePath  string
 	SourceURL string
+	StartPath string
 }
 
 // Item is one entry in a drive folder listing — the unit an FTP-style "ls"
@@ -40,45 +44,47 @@ type Item struct {
 	LastModified time.Time
 }
 
-// parseSiteURL extracts the hostname and server-relative site path from a
-// SharePoint URL such as https://contoso.sharepoint.com/sites/Marketing or a
-// deep link into a library/folder under it. Anything at or below the document
-// library is treated as site path for resolution; library/folder selection is
-// handled separately by ResolveDrive + List.
+// parseSiteURL splits a SharePoint URL into its hostname, server-relative site
+// path, and the leftover path below the site. For
+// https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports it
+// returns ("contoso.sharepoint.com", "/sites/Marketing", "Shared Documents/Reports").
+// The leftover is what tells ResolveDrive whether the URL points at a specific
+// library/folder; the actual library match is done by webUrl in ResolveDrive.
 //
 // Adapted from xql's parseListURL, minus the /Lists/ requirement.
-func parseSiteURL(rawURL string) (hostname, sitePath string, err error) {
+func parseSiteURL(rawURL string) (hostname, sitePath, restPath string, err error) {
 	u, perr := url.Parse(rawURL)
 	if perr != nil {
-		return "", "", fmt.Errorf("parsing site URL: %w", perr)
+		return "", "", "", fmt.Errorf("parsing site URL: %w", perr)
 	}
 	if u.Host == "" {
-		return "", "", fmt.Errorf("site URL has no host: %s", rawURL)
+		return "", "", "", fmt.Errorf("site URL has no host: %s", rawURL)
 	}
 	hostname = u.Host
 
-	path := strings.Trim(u.Path, "/")
-	if path == "" {
-		return hostname, "", nil
+	parts := urlPathSegments(u.Path)
+	if len(parts) == 0 {
+		return hostname, "", "", nil
 	}
-	parts := strings.Split(path, "/")
 
 	// A canonical site URL is /sites/{name} or /teams/{name}; keep just that
-	// prefix as the site path so deep links into libraries still resolve.
+	// prefix as the site path. Anything beyond it is the library/folder path.
 	if len(parts) >= 2 && (strings.EqualFold(parts[0], "sites") || strings.EqualFold(parts[0], "teams")) {
 		sitePath = "/" + parts[0] + "/" + parts[1]
-		return hostname, sitePath, nil
+		return hostname, sitePath, strings.Join(parts[2:], "/"), nil
 	}
 
-	// Root site (no /sites/ segment).
-	return hostname, "", nil
+	// Root site (no /sites/ segment): the whole path is below the site.
+	return hostname, "", strings.Join(parts, "/"), nil
 }
 
-// ResolveDrive resolves a SharePoint site URL to a Graph drive. With library
-// empty it binds the site's default document library ("Documents"/"Shared
-// Documents"); otherwise it matches a library by display name.
+// ResolveDrive resolves a SharePoint URL to a Graph drive. Library selection
+// follows three rules, in order: an explicit library name wins; otherwise a URL
+// that points below the site is matched to a library by webUrl (with any folder
+// remainder kept as the starting path); otherwise the site's default document
+// library ("Documents"/"Shared Documents") is bound.
 func ResolveDrive(ctx context.Context, g *spauth.GraphClient, siteURL, library string) (*Drive, error) {
-	hostname, sitePath, err := parseSiteURL(siteURL)
+	hostname, sitePath, restPath, err := parseSiteURL(siteURL)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +94,15 @@ func ResolveDrive(ctx context.Context, g *spauth.GraphClient, siteURL, library s
 		return nil, fmt.Errorf("resolving site: %w", err)
 	}
 
-	driveID, name, err := resolveDriveID(ctx, g, siteID, library)
+	var driveID, name, startPath string
+	switch {
+	case library != "":
+		driveID, name, err = resolveDriveByName(ctx, g, siteID, library)
+	case restPath != "":
+		driveID, name, startPath, err = resolveDriveFromURL(ctx, g, siteID, siteURL)
+	default:
+		driveID, name, err = resolveDefaultDrive(ctx, g, siteID)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("resolving library: %w", err)
 	}
@@ -100,6 +114,7 @@ func ResolveDrive(ctx context.Context, g *spauth.GraphClient, siteURL, library s
 		Hostname:  hostname,
 		SitePath:  sitePath,
 		SourceURL: siteURL,
+		StartPath: startPath,
 	}, nil
 }
 
@@ -127,45 +142,155 @@ func resolveSiteID(ctx context.Context, g *spauth.GraphClient, hostname, sitePat
 	return site.ID, nil
 }
 
-// resolveDriveID returns the default drive when library is empty, else the
-// drive whose display name matches (case-insensitive).
-func resolveDriveID(ctx context.Context, g *spauth.GraphClient, siteID, library string) (id, name string, err error) {
-	if library == "" {
-		body, err := g.Get(ctx, fmt.Sprintf("/sites/%s/drive", siteID), nil)
-		if err != nil {
-			return "", "", err
-		}
-		var d struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		}
-		if err := json.Unmarshal(body, &d); err != nil {
-			return "", "", fmt.Errorf("decoding default drive: %w", err)
-		}
-		return d.ID, d.Name, nil
-	}
-
-	raws, err := g.GetAll(ctx, fmt.Sprintf("/sites/%s/drives", siteID), url.Values{
-		"$select": {"id,name"},
-	})
+// resolveDefaultDrive binds the site's default document library.
+func resolveDefaultDrive(ctx context.Context, g *spauth.GraphClient, siteID string) (id, name string, err error) {
+	body, err := g.Get(ctx, fmt.Sprintf("/sites/%s/drive", siteID), nil)
 	if err != nil {
 		return "", "", err
 	}
-	var names []string
+	var d struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(body, &d); err != nil {
+		return "", "", fmt.Errorf("decoding default drive: %w", err)
+	}
+	return d.ID, d.Name, nil
+}
+
+// driveMeta is the subset of a Graph drive used to match a URL to a library.
+type driveMeta struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	WebURL string `json:"webUrl"`
+}
+
+// listDrives returns every document library on the site, with the webUrl needed
+// to match one against a deep-linked URL.
+func listDrives(ctx context.Context, g *spauth.GraphClient, siteID string) ([]driveMeta, error) {
+	raws, err := g.GetAll(ctx, fmt.Sprintf("/sites/%s/drives", siteID), url.Values{
+		"$select": {"id,name,webUrl"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	drives := make([]driveMeta, 0, len(raws))
 	for _, raw := range raws {
-		var d struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		}
+		var d driveMeta
 		if err := json.Unmarshal(raw, &d); err != nil {
-			return "", "", fmt.Errorf("decoding drive entry: %w", err)
+			return nil, fmt.Errorf("decoding drive entry: %w", err)
 		}
+		drives = append(drives, d)
+	}
+	return drives, nil
+}
+
+// resolveDriveByName matches a library by display name (case-insensitive).
+func resolveDriveByName(ctx context.Context, g *spauth.GraphClient, siteID, library string) (id, name string, err error) {
+	drives, err := listDrives(ctx, g, siteID)
+	if err != nil {
+		return "", "", err
+	}
+	names := make([]string, 0, len(drives))
+	for _, d := range drives {
 		names = append(names, d.Name)
 		if strings.EqualFold(d.Name, library) {
 			return d.ID, d.Name, nil
 		}
 	}
 	return "", "", fmt.Errorf("no library named %q (found: %s)", library, strings.Join(names, ", "))
+}
+
+// resolveDriveFromURL matches the library whose webUrl the URL points into and
+// returns the folder remainder as the starting path. When no library matches
+// (an unusual URL shape), it falls back to the site's default library.
+func resolveDriveFromURL(ctx context.Context, g *spauth.GraphClient, siteID, rawURL string) (id, name, startPath string, err error) {
+	drives, err := listDrives(ctx, g, siteID)
+	if err != nil {
+		return "", "", "", err
+	}
+	if m, sp, ok := matchDriveByURL(rawURL, drives); ok {
+		return m.ID, m.Name, sp, nil
+	}
+	id, name, err = resolveDefaultDrive(ctx, g, siteID)
+	return id, name, "", err
+}
+
+// matchDriveByURL picks the drive whose webUrl is the longest path-prefix of
+// rawURL and returns the library-relative folder path remaining after it. It
+// honors the modern web-UI deep link, which carries the real folder in an "id"
+// query parameter rather than the path. Matching is case-insensitive (SharePoint
+// paths are), and a trailing Forms/<View>.aspx is dropped since that's a list
+// view, not a folder. ok is false when no drive's host+path prefixes the URL.
+func matchDriveByURL(rawURL string, drives []driveMeta) (match driveMeta, startPath string, ok bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return driveMeta{}, "", false
+	}
+	inHost := strings.ToLower(u.Host)
+	effPath := u.Path
+	if id := u.Query().Get("id"); id != "" {
+		effPath = id
+	}
+	inSegs := urlPathSegments(effPath)
+	if len(inSegs) == 0 {
+		return driveMeta{}, "", false
+	}
+
+	best := -1
+	var remainder []string
+	for _, d := range drives {
+		du, perr := url.Parse(d.WebURL)
+		if perr != nil || strings.ToLower(du.Host) != inHost {
+			continue
+		}
+		dSegs := urlPathSegments(du.Path)
+		if len(dSegs) == 0 || len(dSegs) > len(inSegs) || !segsHasPrefix(inSegs, dSegs) {
+			continue
+		}
+		if len(dSegs) > best {
+			best = len(dSegs)
+			match = d
+			remainder = inSegs[len(dSegs):]
+		}
+	}
+	if best < 0 {
+		return driveMeta{}, "", false
+	}
+	return match, strings.Join(stripViewSuffix(remainder), "/"), true
+}
+
+// urlPathSegments splits an already-decoded URL path into its non-empty
+// segments. url.Parse decodes %20 into the path, so segments carry spaces.
+func urlPathSegments(p string) []string {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
+}
+
+// segsHasPrefix reports whether prefix matches the leading segments of segs,
+// compared case-insensitively.
+func segsHasPrefix(segs, prefix []string) bool {
+	for i := range prefix {
+		if !strings.EqualFold(segs[i], prefix[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// stripViewSuffix drops a trailing Forms/<View>.aspx, the SharePoint list-view
+// URL that isn't a real folder.
+func stripViewSuffix(segs []string) []string {
+	if len(segs) > 0 && strings.HasSuffix(strings.ToLower(segs[len(segs)-1]), ".aspx") {
+		segs = segs[:len(segs)-1]
+		if len(segs) > 0 && strings.EqualFold(segs[len(segs)-1], "Forms") {
+			segs = segs[:len(segs)-1]
+		}
+	}
+	return segs
 }
 
 // itemRef builds the Graph drive-item addressing segment for a library-relative

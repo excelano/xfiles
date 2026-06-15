@@ -21,6 +21,57 @@ func TestItemRef(t *testing.T) {
 	}
 }
 
+func TestParseSiteURL(t *testing.T) {
+	cases := []struct {
+		in, host, sitePath, rest string
+	}{
+		{"https://c.sharepoint.com/sites/Marketing", "c.sharepoint.com", "/sites/Marketing", ""},
+		{"https://c.sharepoint.com/sites/Marketing/", "c.sharepoint.com", "/sites/Marketing", ""},
+		{"https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Reports", "c.sharepoint.com", "/sites/Marketing", "Shared Documents/Reports"},
+		{"https://c.sharepoint.com/teams/Eng/Project%20Files", "c.sharepoint.com", "/teams/Eng", "Project Files"},
+		{"https://c.sharepoint.com", "c.sharepoint.com", "", ""},
+		{"https://c.sharepoint.com/Shared%20Documents", "c.sharepoint.com", "", "Shared Documents"},
+	}
+	for _, c := range cases {
+		host, sitePath, rest, err := parseSiteURL(c.in)
+		if err != nil {
+			t.Errorf("parseSiteURL(%q) error: %v", c.in, err)
+			continue
+		}
+		if host != c.host || sitePath != c.sitePath || rest != c.rest {
+			t.Errorf("parseSiteURL(%q) = (%q, %q, %q), want (%q, %q, %q)",
+				c.in, host, sitePath, rest, c.host, c.sitePath, c.rest)
+		}
+	}
+}
+
+func TestMatchDriveByURL(t *testing.T) {
+	drives := []driveMeta{
+		{ID: "d1", Name: "Documents", WebURL: "https://c.sharepoint.com/sites/Marketing/Shared%20Documents"},
+		{ID: "d2", Name: "Project Files", WebURL: "https://c.sharepoint.com/sites/Marketing/Project%20Files"},
+	}
+	cases := []struct {
+		name, in, wantID, wantStart string
+		wantOK                      bool
+	}{
+		{"library root", "https://c.sharepoint.com/sites/Marketing/Project%20Files", "d2", "", true},
+		{"folder in default lib", "https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Reports", "d1", "Reports", true},
+		{"nested folder", "https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Reports/Q1", "d1", "Reports/Q1", true},
+		{"view suffix stripped", "https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Forms/AllItems.aspx", "d1", "", true},
+		{"folder via id param", "https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FMarketing%2FShared%20Documents%2FReports%2FQ1&viewid=x", "d1", "Reports/Q1", true},
+		{"longest match wins", "https://c.sharepoint.com/sites/Marketing/Project%20Files/Sub", "d2", "Sub", true},
+		{"no match below site", "https://c.sharepoint.com/sites/Marketing", "", "", false},
+		{"wrong host", "https://other.sharepoint.com/sites/Marketing/Shared%20Documents/Reports", "", "", false},
+	}
+	for _, c := range cases {
+		m, start, ok := matchDriveByURL(c.in, drives)
+		if ok != c.wantOK || m.ID != c.wantID || start != c.wantStart {
+			t.Errorf("%s: matchDriveByURL(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				c.name, c.in, m.ID, start, ok, c.wantID, c.wantStart, c.wantOK)
+		}
+	}
+}
+
 func TestSplitPath(t *testing.T) {
 	cases := []struct {
 		in, parent, leaf string

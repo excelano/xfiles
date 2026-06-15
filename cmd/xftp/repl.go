@@ -36,7 +36,7 @@ func runREPL(ctx context.Context, g *spauth.GraphClient, d *drive.Drive) int {
 	if err != nil {
 		wd = "."
 	}
-	s := &session{ctx: ctx, g: g, d: d, localDir: wd}
+	s := &session{ctx: ctx, g: g, d: d, cwd: d.StartPath, localDir: wd}
 
 	line := liner.NewLiner()
 	defer line.Close()

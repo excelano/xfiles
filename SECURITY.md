@@ -12,7 +12,7 @@ The latest v1.x release receives security fixes. Older versions are not supporte
 
 ## What xftp can access
 
-xftp is a CLI that runs locally on your machine. It calls Microsoft Graph over HTTPS to read and write items in a single bound SharePoint document library — the one named by the `--site` (and optional `--library`) flag. Authentication is delegated device-code OAuth against your Microsoft Entra ID account; the single scope requested is `Sites.ReadWrite.All`. xftp cannot access any data your account cannot already access in SharePoint Online, and it touches no Graph endpoints beyond the bound library's drive. There is no daemon, no mounted filesystem, and no server component.
+xftp is a CLI that runs locally on your machine. It calls Microsoft Graph over HTTPS to read and write items in a single bound SharePoint document library — the one named by the URL you pass (and the optional `--library` flag). Authentication is delegated device-code OAuth against your Microsoft Entra ID account; the single scope requested is `Sites.ReadWrite.All`. xftp cannot access any data your account cannot already access in SharePoint Online, and it touches no Graph endpoints beyond the bound library's drive. There is no daemon, no mounted filesystem, and no server component.
 
 Downloads stream to a temporary file in the destination directory and are renamed into place only on success; uploads larger than 250 MB go through a Graph upload session, which is cancelled on the server if the transfer is interrupted.
 
