@@ -35,6 +35,8 @@ func TestParseSiteURL(t *testing.T) {
 		{"https://c.sharepoint.com/:f:/r/sites/Marketing/Shared%20Documents/General/Phase%202", "c.sharepoint.com", "/sites/Marketing", "Shared Documents/General/Phase 2"},
 		{"https://c.sharepoint.com/:w:/r/sites/Marketing", "c.sharepoint.com", "/sites/Marketing", ""},
 		{"https://c.sharepoint.com/:x:/g/teams/Eng/Project%20Files", "c.sharepoint.com", "/teams/Eng", "Project Files"},
+		// Full "Copy link" with trailing query cruft (?csf=&web=&e=share-token).
+		{"https://c.sharepoint.com/:f:/r/sites/Marketing/Shared%20Documents/General/Phase%202?csf=1&web=1&e=cRDuU2", "c.sharepoint.com", "/sites/Marketing", "Shared Documents/General/Phase 2"},
 	}
 	for _, c := range cases {
 		host, sitePath, rest, err := parseSiteURL(c.in)
