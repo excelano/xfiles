@@ -12,15 +12,15 @@ The latest v1.x release receives security fixes. Older versions are not supporte
 
 ## What xftp can access
 
-xftp is a CLI that runs locally on your machine. It calls Microsoft Graph over HTTPS to read and write items in a single bound SharePoint document library — the one named by the URL you pass (and the optional `--library` flag). Authentication is delegated device-code OAuth against your Microsoft Entra ID account; the single scope requested is `Sites.ReadWrite.All`. xftp cannot access any data your account cannot already access in SharePoint Online, and it touches no Graph endpoints beyond the bound library's drive. There is no daemon, no mounted filesystem, and no server component.
+This repository ships two CLIs that run locally on your machine: `xftp` (interactive) and `xcp` (one-shot copies). Both call Microsoft Graph over HTTPS to read and write items in a single bound SharePoint document library — the one named by the URL you pass (and the optional `--library` flag). Authentication is delegated device-code OAuth against your Microsoft Entra ID account; the single scope requested is `Sites.ReadWrite.All`. Neither tool can access any data your account cannot already access in SharePoint Online, and they touch no Graph endpoints beyond the bound library's drive. There is no daemon, no mounted filesystem, and no server component.
 
 Downloads stream to a temporary file in the destination directory and are renamed into place only on success; uploads larger than 250 MB go through a Graph upload session, which is cancelled on the server if the transfer is interrupted.
 
-IT administrators evaluating xftp for a Microsoft 365 tenant will find the application's registration details, the delegated-permission risk profile, and the consent and revocation steps in [ADMINS.md](ADMINS.md).
+IT administrators evaluating either tool for a Microsoft 365 tenant will find the application's registration details, the delegated-permission risk profile, and the consent and revocation steps in [ADMINS.md](ADMINS.md). Both tools share one app registration, so a single consent covers both.
 
-## What xftp stores
+## What the tools store
 
-xftp stores REPL command history at `~/.config/xftp/history` and caches a refresh token at `~/.config/xftp/sp-token.json`, both with file mode 0600 (directory mode 0700). The cached token lets subsequent runs reauthenticate without another device-code prompt. Delete `sp-token.json` to force re-authentication; revoke the granted permission at https://myaccount.microsoft.com/applications to invalidate the token server-side. There is no telemetry, no analytics, and no remote logging.
+xftp stores REPL command history at `~/.config/xftp/history` and caches a refresh token at `~/.config/xftp/sp-token.json`; xcp caches its own refresh token at `~/.config/xcp/sp-token.json`. All are written with file mode 0600 (directory mode 0700). The cached token lets subsequent runs reauthenticate without another device-code prompt. Delete `sp-token.json` to force re-authentication; revoke the granted permission at https://myaccount.microsoft.com/applications to invalidate the token server-side. There is no telemetry, no analytics, and no remote logging.
 
 ## Verifying releases
 

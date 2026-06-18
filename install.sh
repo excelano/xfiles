@@ -1,7 +1,7 @@
 #!/bin/sh
-# xftp installer — fetches the latest release binary for the host platform
-# and drops it into /usr/local/bin (or ~/.local/bin if /usr/local/bin is not
-# writable). POSIX sh, no bash extensions.
+# xftp installer — fetches the latest release binaries (xftp and its scp-style
+# companion xcp) for the host platform and drops them into /usr/local/bin (or
+# ~/.local/bin if /usr/local/bin is not writable). POSIX sh, no bash extensions.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/excelano/xftp/main/install.sh | sh
@@ -13,6 +13,8 @@
 set -eu
 
 REPO="excelano/xftp"
+# Binaries shipped from this repo, installed together so the two stay in lockstep.
+BINARIES="xftp xcp"
 
 say() { printf '%s\n' "$*" >&2; }
 err() { say "error: $*"; exit 1; }
@@ -108,53 +110,70 @@ pick_install_dir() {
 	fi
 }
 
-download_and_install() {
-	VERSION_NUM=${VERSION#v}
-	ARCHIVE="xftp_${VERSION_NUM}_${PLATFORM}.tar.gz"
-	URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
-	CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
+# checksum_of prints the sha256 of a file, using whichever tool is present.
+checksum_of() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{print $1}'
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | awk '{print $1}'
+	else
+		err "need sha256sum or shasum to verify the download"
+	fi
+}
 
-	TMPDIR=$(mktemp -d)
-	trap 'rm -rf "$TMPDIR"' EXIT INT TERM
+# install_one downloads, checksum-verifies, and installs a single binary's
+# archive. $1 is the binary name; the checksums file is already in $TMPDIR.
+install_one() {
+	BIN="$1"
+	ARCHIVE="${BIN}_${VERSION_NUM}_${PLATFORM}.tar.gz"
+	URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
 
 	say "Downloading $ARCHIVE"
 	if ! curl -fsSL -o "$TMPDIR/$ARCHIVE" "$URL"; then
 		err "download failed: $URL"
 	fi
-
-	say "Verifying checksum"
-	if ! curl -fsSL -o "$TMPDIR/checksums.txt" "$CHECKSUMS_URL"; then
-		err "could not fetch checksums.txt from release"
-	fi
 	EXPECTED=$(awk -v a="$ARCHIVE" '$2==a {print $1}' "$TMPDIR/checksums.txt")
 	if [ -z "$EXPECTED" ]; then
 		err "checksums.txt has no entry for $ARCHIVE"
 	fi
-	if command -v sha256sum >/dev/null 2>&1; then
-		ACTUAL=$(sha256sum "$TMPDIR/$ARCHIVE" | awk '{print $1}')
-	elif command -v shasum >/dev/null 2>&1; then
-		ACTUAL=$(shasum -a 256 "$TMPDIR/$ARCHIVE" | awk '{print $1}')
-	else
-		err "need sha256sum or shasum to verify the download"
-	fi
+	ACTUAL=$(checksum_of "$TMPDIR/$ARCHIVE")
 	if [ "$EXPECTED" != "$ACTUAL" ]; then
-		err "checksum mismatch: expected $EXPECTED, got $ACTUAL"
+		err "checksum mismatch for $ARCHIVE: expected $EXPECTED, got $ACTUAL"
 	fi
 
-	say "Extracting to $INSTALL_DIR"
-	tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR" xftp
+	tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR" "$BIN"
 	# install(1) handles permissions and atomicity better than mv on most systems.
 	if command -v install >/dev/null 2>&1; then
-		install -m 0755 "$TMPDIR/xftp" "$INSTALL_DIR/xftp"
+		install -m 0755 "$TMPDIR/$BIN" "$INSTALL_DIR/$BIN"
 	else
-		mv "$TMPDIR/xftp" "$INSTALL_DIR/xftp"
-		chmod 0755 "$INSTALL_DIR/xftp"
+		mv "$TMPDIR/$BIN" "$INSTALL_DIR/$BIN"
+		chmod 0755 "$INSTALL_DIR/$BIN"
 	fi
+}
+
+download_and_install() {
+	VERSION_NUM=${VERSION#v}
+	CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
+
+	TMPDIR=$(mktemp -d)
+	trap 'rm -rf "$TMPDIR"' EXIT INT TERM
+
+	say "Fetching checksums"
+	if ! curl -fsSL -o "$TMPDIR/checksums.txt" "$CHECKSUMS_URL"; then
+		err "could not fetch checksums.txt from release"
+	fi
+
+	say "Installing to $INSTALL_DIR"
+	for BIN in $BINARIES; do
+		install_one "$BIN"
+	done
 }
 
 post_install_message() {
 	say ""
-	say "xftp installed to $INSTALL_DIR/xftp"
+	for BIN in $BINARIES; do
+		say "$BIN installed to $INSTALL_DIR/$BIN"
+	done
 	case ":$PATH:" in
 		*":$INSTALL_DIR:"*) ;;
 		*) say "Note: $INSTALL_DIR is not on your PATH. Add it to your shell rc:"
@@ -163,6 +182,7 @@ post_install_message() {
 	say ""
 	say "Try it:"
 	say "    xftp --help"
+	say "    xcp --help"
 }
 
 detect_platform

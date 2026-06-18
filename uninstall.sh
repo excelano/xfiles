@@ -1,19 +1,22 @@
 #!/bin/sh
-# xftp uninstaller — finds and removes the xftp binary, with an optional
-# follow-up step to remove the REPL history at ~/.config/xftp/. POSIX sh,
-# no bash extensions.
+# xftp uninstaller — finds and removes the xftp and xcp binaries, with an
+# optional follow-up step to remove their config dirs at ~/.config/xftp and
+# ~/.config/xcp (REPL history, cached tokens). POSIX sh, no bash extensions.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/excelano/xftp/main/uninstall.sh | sh
 #
 # Environment variables:
 #   XFTP_UNINSTALL_YES=1  Skip the binary-removal confirmation (assume yes).
-#                        Does NOT imply purge: the config dir is kept
+#                        Does NOT imply purge: config dirs are kept
 #                        unless XFTP_PURGE=1 is also set.
-#   XFTP_PURGE=1          Also remove ~/.config/xftp/ (history, etc.),
-#                        independent of XFTP_UNINSTALL_YES.
+#   XFTP_PURGE=1          Also remove ~/.config/xftp and ~/.config/xcp
+#                        (history, cached tokens), independent of
+#                        XFTP_UNINSTALL_YES.
 
 set -eu
+
+BINARIES="xftp xcp"
 
 say() { printf '%s\n' "$*" >&2; }
 err() { say "error: $*"; exit 1; }
@@ -41,61 +44,77 @@ read_yes() {
 	esac
 }
 
-if ! command -v xftp >/dev/null 2>&1; then
-	say "xftp is not on PATH; nothing to uninstall."
-	say "If you installed to a custom location, remove it manually:"
-	say "    rm /path/to/xftp"
+# remove_binary finds and removes one binary by name, warning about any
+# additional copies left elsewhere on PATH.
+remove_binary() {
+	BIN="$1"
+	if ! command -v "$BIN" >/dev/null 2>&1; then
+		say "$BIN is not on PATH; skipping."
+		return 0
+	fi
+	TARGET=$(command -v "$BIN")
+	say "Found $BIN at $TARGET"
+	if [ ! -w "$TARGET" ] && [ ! -w "$(dirname "$TARGET")" ]; then
+		err "$TARGET is not writable; re-run with sudo to remove it"
+	fi
+	if ! read_yes "Remove $TARGET?"; then
+		say "Skipped $TARGET"
+		return 0
+	fi
+	rm -f "$TARGET" || err "could not remove $TARGET"
+	say "Removed $TARGET"
+
+	# Invalidate the shell's command hash; without this, `command -v` happily
+	# reports the just-deleted path as still present and the duplicate-install
+	# check below cries wolf.
+	hash -r 2>/dev/null || true
+
+	LEFTOVER=$(command -v "$BIN" 2>/dev/null || true)
+	if [ -n "$LEFTOVER" ]; then
+		say "Note: another $BIN binary is still on PATH at $LEFTOVER"
+		say "Re-run this uninstaller to remove it, or remove it manually."
+	fi
+}
+
+# remove_config handles the optional state cleanup for one config dir,
+# decoupled from the binary confirmation on purpose: XFTP_UNINSTALL_YES means
+# "don't ask me about the binary", NOT "delete my data". Purging is opt-in via
+# XFTP_PURGE=1 or an explicit interactive yes.
+remove_config() {
+	DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$1"
+	[ -d "$DIR" ] || return 0
+	if [ "${XFTP_PURGE:-0}" = "1" ]; then
+		rm -rf "$DIR"
+		say "Removed $DIR"
+	elif [ "${XFTP_UNINSTALL_YES:-0}" = "1" ]; then
+		say "Kept $DIR; set XFTP_PURGE=1 to remove it"
+	elif read_yes "Also remove $DIR?"; then
+		rm -rf "$DIR"
+		say "Removed $DIR"
+	else
+		say "Kept $DIR"
+	fi
+}
+
+ANY=0
+for BIN in $BINARIES; do
+	if command -v "$BIN" >/dev/null 2>&1; then
+		ANY=1
+	fi
+done
+if [ "$ANY" = "0" ]; then
+	say "Neither xftp nor xcp is on PATH; nothing to uninstall."
+	say "If you installed to a custom location, remove it manually."
 	exit 0
 fi
 
-TARGET=$(command -v xftp)
-say "Found xftp at $TARGET"
+for BIN in $BINARIES; do
+	remove_binary "$BIN"
+done
 
-if [ ! -w "$TARGET" ] && [ ! -w "$(dirname "$TARGET")" ]; then
-	err "$TARGET is not writable; re-run with sudo to remove it"
-fi
-
-if ! read_yes "Remove $TARGET?"; then
-	say "Aborted."
-	exit 1
-fi
-
-rm -f "$TARGET" || err "could not remove $TARGET"
-say "Removed $TARGET"
-
-# Invalidate the shell's command hash; without this, `command -v` happily
-# reports the just-deleted path as still present and the duplicate-install
-# check below cries wolf.
-hash -r 2>/dev/null || true
-
-# Check for additional installs (e.g. one in /usr/local/bin plus one in
-# ~/.local/bin). PATH lookup only finds the first; warn so the user knows
-# the others remain.
-LEFTOVER=$(command -v xftp 2>/dev/null || true)
-if [ -n "$LEFTOVER" ]; then
-	say ""
-	say "Note: another xftp binary is still on PATH at $LEFTOVER"
-	say "Re-run this uninstaller to remove it, or remove it manually."
-fi
-
-# Optional state cleanup, decoupled from the binary confirmation on purpose:
-# XFTP_UNINSTALL_YES means "don't ask me about the binary", NOT "delete my
-# data". Purging the history is opt-in via XFTP_PURGE=1 or an explicit
-# interactive yes — skipping prompts should never silently drop state.
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/xftp"
-if [ -d "$CONFIG_DIR" ]; then
-	if [ "${XFTP_PURGE:-0}" = "1" ]; then
-		rm -rf "$CONFIG_DIR"
-		say "Removed $CONFIG_DIR"
-	elif [ "${XFTP_UNINSTALL_YES:-0}" = "1" ]; then
-		say "Kept $CONFIG_DIR (history); set XFTP_PURGE=1 to remove it"
-	elif read_yes "Also remove $CONFIG_DIR (history)?"; then
-		rm -rf "$CONFIG_DIR"
-		say "Removed $CONFIG_DIR"
-	else
-		say "Kept $CONFIG_DIR (history)"
-	fi
-fi
+for BIN in $BINARIES; do
+	remove_config "$BIN"
+done
 
 say ""
 say "Done."

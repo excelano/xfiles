@@ -28,10 +28,40 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
+  - id: xcp
+    main: ./cmd/xcp
+    binary: xcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
 
 archives:
   - id: xftp
+    ids:
+      - xftp
     name_template: "xftp_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: ["zip"]
+    files:
+      - LICENSE
+      - README.md
+  - id: xcp
+    ids:
+      - xcp
+    name_template: "xcp_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats: ["zip"]
@@ -41,6 +71,8 @@ archives:
 
 nfpms:
   - id: xftp
+    ids:
+      - xftp
     package_name: xftp
     file_name_template: "{{ .ConventionalFileName }}"
     maintainer: David M. Anderson <david.anderson@excelano.com>
@@ -61,6 +93,29 @@ nfpms:
         dst: /usr/share/doc/xftp/copyright
       - src: ./README.md
         dst: /usr/share/doc/xftp/README.md
+  - id: xcp
+    ids:
+      - xcp
+    package_name: xcp
+    file_name_template: "{{ .ConventionalFileName }}"
+    maintainer: David M. Anderson <david.anderson@excelano.com>
+    description: |
+      xcp — an scp-style one-shot copy for SharePoint document libraries.
+      Copy a file to or from a library in a single command over Microsoft
+      Graph; direction is set by which argument is the URL. Device-code
+      auth; large files stream through resumable upload sessions.
+    homepage: https://github.com/excelano/xftp
+    license: MIT
+    formats:
+      - deb
+    section: utils
+    priority: optional
+    bindir: /usr/bin
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/doc/xcp/copyright
+      - src: ./README.md
+        dst: /usr/share/doc/xcp/README.md
 
 checksum:
   name_template: "checksums.txt"
