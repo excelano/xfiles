@@ -1,5 +1,5 @@
 #!/bin/sh
-# xftp uninstaller — finds and removes the xftp, xcp, xfind, xtree, and xsync binaries,
+# xfiles uninstaller — finds and removes the xftp, xcp, xfind, xtree, and xsync binaries,
 # with an optional follow-up step to remove their config dirs under ~/.config
 # (REPL history, cached tokens). POSIX sh, no bash extensions.
 #
@@ -7,12 +7,12 @@
 #   curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/uninstall.sh | sh
 #
 # Environment variables:
-#   XFTP_UNINSTALL_YES=1  Skip the binary-removal confirmation (assume yes).
+#   XFILES_UNINSTALL_YES=1  Skip the binary-removal confirmation (assume yes).
 #                        Does NOT imply purge: config dirs are kept
-#                        unless XFTP_PURGE=1 is also set.
-#   XFTP_PURGE=1          Also remove the ~/.config/{xftp,xcp,xfind,xtree,xsync}
+#                        unless XFILES_PURGE=1 is also set.
+#   XFILES_PURGE=1          Also remove the ~/.config/{xftp,xcp,xfind,xtree,xsync}
 #                        config dirs (history, cached tokens), independent of
-#                        XFTP_UNINSTALL_YES.
+#                        XFILES_UNINSTALL_YES.
 
 set -eu
 
@@ -26,11 +26,11 @@ err() { say "error: $*"; exit 1; }
 # is the script itself.
 read_yes() {
 	prompt="$1"
-	if [ "${XFTP_UNINSTALL_YES:-0}" = "1" ]; then
+	if [ "${XFILES_UNINSTALL_YES:-0}" = "1" ]; then
 		return 0
 	fi
 	if [ ! -t 0 ] && [ ! -e /dev/tty ]; then
-		err "no terminal available for confirmation; re-run with XFTP_UNINSTALL_YES=1 to skip the prompt"
+		err "no terminal available for confirmation; re-run with XFILES_UNINSTALL_YES=1 to skip the prompt"
 	fi
 	printf '%s [y/N]: ' "$prompt" >&2
 	if [ -e /dev/tty ]; then
@@ -77,17 +77,17 @@ remove_binary() {
 }
 
 # remove_config handles the optional state cleanup for one config dir,
-# decoupled from the binary confirmation on purpose: XFTP_UNINSTALL_YES means
+# decoupled from the binary confirmation on purpose: XFILES_UNINSTALL_YES means
 # "don't ask me about the binary", NOT "delete my data". Purging is opt-in via
-# XFTP_PURGE=1 or an explicit interactive yes.
+# XFILES_PURGE=1 or an explicit interactive yes.
 remove_config() {
 	DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$1"
 	[ -d "$DIR" ] || return 0
-	if [ "${XFTP_PURGE:-0}" = "1" ]; then
+	if [ "${XFILES_PURGE:-0}" = "1" ]; then
 		rm -rf "$DIR"
 		say "Removed $DIR"
-	elif [ "${XFTP_UNINSTALL_YES:-0}" = "1" ]; then
-		say "Kept $DIR; set XFTP_PURGE=1 to remove it"
+	elif [ "${XFILES_UNINSTALL_YES:-0}" = "1" ]; then
+		say "Kept $DIR; set XFILES_PURGE=1 to remove it"
 	elif read_yes "Also remove $DIR?"; then
 		rm -rf "$DIR"
 		say "Removed $DIR"

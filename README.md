@@ -1,16 +1,29 @@
-# xftp
+# xfiles
 
-xftp gives a SharePoint document library the feel of an FTP session. You connect to a site, land at an interactive prompt, and move files around with the verbs your fingers already know: `ls`, `cd`, `get`, `put`, `mkdir`, `rm`, `mv`. There is no SSH, FTP, or SCP server behind SharePoint to connect to — those protocols simply don't exist there — so xftp recreates the experience on top of the Microsoft Graph drive API and hides the Graph plumbing entirely.
+xfiles is a family of command-line tools that give a SharePoint document library the feel of the Unix file utilities your fingers already know. There is no SSH, FTP, SCP, or rsync server behind SharePoint to connect to — those protocols simply don't exist there — so each tool recreates the experience on top of the Microsoft Graph drive API and hides the Graph plumbing entirely.
 
-It is a single static Go binary with no daemon and no mounted filesystem. Authentication is device-code OAuth: the first time you connect, xftp prints a short code and a URL, you sign in once in a browser, and the refresh token is cached under `~/.config/xftp` so later runs are silent.
+| Tool | Unix kin | What it does |
+|---|---|---|
+| `xftp` | ftp | Interactive session: browse and move files with `ls`, `cd`, `get`, `put`, `mkdir`, `rm`, `mv`. |
+| `xcp` | scp | One-shot copy of a single file to or from a library; streams through `-` for pipes. |
+| `xsync` | rsync | Recursively mirror a directory tree to or from a library, transferring only what changed. |
+| `xfind` | find | Walk a library and print matching paths, filtered by name, type, or depth. |
+| `xtree` | tree | Print a library as an indented tree with a directory and file count. |
 
-The repository also ships **xcp**, an scp-style companion for one-shot, non-interactive copies — a single command to move one file to or from a library without entering a session. It is the right tool for scripts and quick transfers; xftp is the right tool for browsing and working interactively. The two share the same engine and the same sign-in. See [One-shot copies with xcp](#one-shot-copies-with-xcp) below.
-
-Two more companions cover recursive listing. **xfind** is the `find` of the family: it walks a library and prints matching paths one per line, filtered by name, type, or depth, ready to pipe. **xtree** is the `tree` of the family: it prints the same walk as an indented tree with a directory and file count. Both are read-only. See [Recursive listing with xfind and xtree](#recursive-listing-with-xfind-and-xtree) below.
+Each is a single static Go binary with no daemon and no mounted filesystem. Authentication is device-code OAuth shared across the whole suite: the first time a tool connects it prints a short code and a URL, you sign in once in a browser, and the refresh token is cached under `~/.config` so later runs are silent. All five share one app registration, so a single consent covers the family (and the sibling tool [xql](https://github.com/excelano/xql)).
 
 ## Install
 
-Prebuilt binary (Linux and macOS, x86_64 and arm64):
+On Debian or Ubuntu, add the [Excelano apt repository](https://excelano.com/apt/) once, then install the whole suite as a single metapackage so `apt upgrade` keeps everything current:
+
+```sh
+curl -fsSL https://excelano.com/apt/setup.sh | sudo sh
+sudo apt install xfiles
+```
+
+`xfiles` is a metapackage that pulls in all five tools. To install just one, name it instead — `sudo apt install xsync`, for example.
+
+On other platforms, the install script fetches prebuilt binaries (Linux and macOS, x86_64 and arm64) and drops all five into one directory:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sh
@@ -22,46 +35,38 @@ If the installer needs to write to a root-owned directory like `/usr/local/bin`,
 curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sudo sh
 ```
 
-Pin a version with `XFTP_VERSION=v1.0.0`, or install elsewhere with `XFTP_INSTALL_DIR=$HOME/bin`.
-
-The installer drops `xftp`, `xcp`, `xfind`, and `xtree` into the same directory.
-
-On Debian or Ubuntu, install from the [Excelano apt repository](https://excelano.com/apt/) instead, so `apt upgrade` keeps them current:
-
-```sh
-curl -fsSL https://excelano.com/apt/setup.sh | sudo sh
-sudo apt install xftp xcp xfind xtree
-```
+Pin a version with `XFILES_VERSION=v1.5.0`, or install elsewhere with `XFILES_INSTALL_DIR=$HOME/bin`. To uninstall, run the matching `uninstall.sh` the same way, which removes all five binaries.
 
 From source (Go 1.24 or later):
 
 ```
 go install github.com/excelano/xfiles/cmd/xftp@latest
 go install github.com/excelano/xfiles/cmd/xcp@latest
+go install github.com/excelano/xfiles/cmd/xsync@latest
 go install github.com/excelano/xfiles/cmd/xfind@latest
 go install github.com/excelano/xfiles/cmd/xtree@latest
 ```
 
-To uninstall, run `curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/uninstall.sh | sh`, which removes all four binaries.
+## Pointing at a library
 
-## Connecting
-
-Pass a SharePoint URL as the only argument. It can be a site, a document library, or a folder — including the link you copy straight from the browser address bar.
+Every tool takes a SharePoint URL — a site, a document library, or a folder, including the link you copy straight from the browser address bar.
 
 ```
-xftp https://contoso.sharepoint.com/sites/Marketing
-xftp https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports
+https://contoso.sharepoint.com/sites/Marketing
+https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports
 ```
 
-Wrap the URL in single quotes if it contains `?` or `&`, which the "Copy link" button's URLs always do — otherwise the shell splits the command on the `&` before xftp ever sees it. A plain site or folder URL like the ones above needs no quoting.
+Wrap the URL in single quotes if it contains `?` or `&`, which the "Copy link" button's URLs always do — otherwise the shell splits the command on the `&` before the tool ever sees it. A plain site or folder URL like the ones above needs no quoting.
 
-xftp works out which library to bind from the URL. A bare site URL binds the site's default document library. A URL that points into a specific library binds that one, and if it points at a folder within the library, xftp drops you straight into that folder. To force a particular library regardless of the URL, name it by its display name:
+The library is worked out from the URL. A bare site URL binds the site's default document library. A URL that points into a specific library binds that one, and where it points at a folder within the library, the tool starts there. To force a particular library regardless of the URL, name it by its display name with `--library`, which every tool accepts:
 
 ```
 xftp --library "Project Files" https://contoso.sharepoint.com/sites/Marketing
 ```
 
-Once connected you're at the prompt, which shows your position in the library:
+## xftp — interactive sessions
+
+`xftp` connects to a library and drops you at a prompt that shows your position, where you move files with the verbs your fingers already know:
 
 ```
 xftp:/> ls
@@ -71,8 +76,6 @@ xftp:/Reports> put report.pdf Archive/report.pdf
 ```
 
 Paths may be relative to the current folder or absolute with a leading `/`, and `.`/`..` work as you'd expect. Names containing spaces can be quoted (`"Phase 2"` or `'Phase 2'`) or escaped (`Phase\ 2`), the same way you would in a shell.
-
-## Commands
 
 | Command | What it does |
 |---|---|
@@ -92,7 +95,7 @@ Paths may be relative to the current folder or absolute with a leading `/`, and 
 
 Deleting a single file goes straight through, since SharePoint routes it to the recycle bin and it can be recovered there. Deleting a folder is recursive and irreversible from xftp's side, so it asks first.
 
-## One-shot copies with xcp
+## xcp — one-shot copies
 
 When you just need to move a single file and don't want a session, use `xcp`. It mirrors `scp`: two arguments, a source and a destination, where exactly one of them is a SharePoint URL. Which side carries the URL decides the direction, the same way `scp` keys off which side carries `host:`.
 
@@ -108,7 +111,7 @@ Download a file from a library to the current directory:
 xcp "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/Q1 Plan.xlsx" ./
 ```
 
-The destination follows `cp`/`scp` habits. On upload, a URL that points at a folder copies the file into it under its own name, a URL that points at an existing file overwrites it, and any other path is taken as the new name. On download, a destination that is an existing directory receives the file under its remote name, and otherwise the destination is the path to write. The `--library` flag works as it does in xftp, and the same copy-link URLs are understood, so you can paste straight from SharePoint's "Copy link" button — but wrap that URL in single quotes, because a copy link carries `?` and `&` characters and the shell will otherwise split the command on the `&` before xcp sees it.
+The destination follows `cp`/`scp` habits. On upload, a URL that points at a folder copies the file into it under its own name, a URL that points at an existing file overwrites it, and any other path is taken as the new name. On download, a destination that is an existing directory receives the file under its remote name, and otherwise the destination is the path to write.
 
 Use `-` as the local side to stream instead of naming a file. A `-` destination cats the remote file to stdout, which keeps the byte stream clean for piping; a `-` source uploads from stdin, in which case the URL must name the target file since stdin has no name of its own:
 
@@ -117,11 +120,38 @@ xcp "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/Q1.
 generate-report | xcp - "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/report.csv"
 ```
 
-xcp authenticates exactly like xftp and through the same app registration, but it keeps its own token cache under `~/.config/xcp`, so the first run signs in once of its own. Recursive directory copies (`-r`) aren't supported yet; xcp moves one file per invocation.
+Recursive directory copies aren't part of xcp — that job belongs to `xsync` below, which moves whole trees and transfers only what changed. xcp keeps its own token cache under `~/.config/xcp`.
 
-## Recursive listing with xfind and xtree
+## xsync — recursive mirror
 
-Where `ls` shows one folder, `xfind` and `xtree` walk a whole library. Both take a single SharePoint URL — site, library, or folder — and recurse from there, the same URL shapes xftp and xcp accept, copy links included (wrap those in single quotes).
+`xsync` mirrors a whole directory tree between the local filesystem and a library, the way `rsync` does. Two arguments, a source and a destination, exactly one of them a SharePoint URL; which side carries the URL sets the direction.
+
+Push a local folder up to a library:
+
+```
+xsync ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
+```
+
+Pull a library folder down to a local directory:
+
+```
+xsync "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports" ./reports
+```
+
+Only files that are new or changed are transferred, compared by size and modification time, so a second run with nothing changed transfers nothing. To make that comparison hold across runs, xsync records each uploaded file's modification time on the SharePoint side and restores the local modification time on download, so unchanged files aren't re-sent.
+
+By default xsync only adds and updates; it never deletes. Pass `--delete` to make the destination an exact mirror, removing items that no longer exist in the source — when run in a terminal it asks for confirmation first. Pass `--dry-run` (`-n`) to print the full plan and change nothing, which is the safe way to preview a `--delete`:
+
+```
+xsync --dry-run --delete ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
+xsync --delete ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
+```
+
+xsync keeps its own token cache under `~/.config/xsync`.
+
+## xfind and xtree — recursive listing
+
+Where `ls` shows one folder, `xfind` and `xtree` walk a whole library. Both take a single SharePoint URL — site, library, or folder — and recurse from there, the same URL shapes the other tools accept, copy links included. Both are read-only: they only ever list.
 
 `xfind` prints one path per line, relative to the folder the URL points at, the way `find` prints paths relative to its starting directory. With no flags it lists everything; `--name` (or case-insensitive `--iname`) filters by a glob on the file or folder name, `--type f` or `--type d` restricts to files or folders, and `--maxdepth` limits how deep it descends.
 
@@ -140,28 +170,29 @@ xtree https://contoso.sharepoint.com/sites/Marketing
 xtree -L 2 -d "https://contoso.sharepoint.com/sites/Marketing/Shared Documents"
 ```
 
-Both are read-only — they only ever list — and each keeps its own token cache (`~/.config/xfind`, `~/.config/xtree`).
+Each keeps its own token cache (`~/.config/xfind`, `~/.config/xtree`).
 
 ## Authentication and tenants
 
-xftp authenticates through a multi-tenant Azure app registration ("Excelano SharePoint tools"), shared with `xcp`, `xfind`, `xtree`, and with the sibling tool [xql](https://github.com/excelano/xql), so consenting once covers them all. Pointing xftp at another organization's site uses that same registration — nobody sets up their own. The first connection to a new tenant raises a one-time consent prompt; depending on that tenant's policy, either the user or an administrator clears it, after which everyone in the tenant is covered. The single scope requested is `Sites.ReadWrite.All`. If your organization restricts user consent, [ADMINS.md](ADMINS.md) has everything your IT department needs to review and approve the application.
+The suite authenticates through a multi-tenant Azure app registration ("Excelano SharePoint tools"), shared across `xftp`, `xcp`, `xsync`, `xfind`, `xtree`, and the sibling tool [xql](https://github.com/excelano/xql), so consenting once covers them all. Pointing a tool at another organization's site uses that same registration — nobody sets up their own. The first connection to a new tenant raises a one-time consent prompt; depending on that tenant's policy, either the user or an administrator clears it, after which everyone in the tenant is covered. The single scope requested is `Sites.ReadWrite.All`. If your organization restricts user consent, [ADMINS.md](ADMINS.md) has everything your IT department needs to review and approve the application.
 
 To use your own app registration instead, change `defaultClientID` in `internal/spauth/auth.go` and rebuild.
+
+## Large files and transfers
+
+Files up to 250 MB upload in a single request. Above that, the transfer opens a Graph upload session and streams the file in 10 MiB chunks. Downloads stream straight to disk as well, into a temporary file that's renamed into place only once the transfer completes, so an interrupted download never leaves a corrupt file at the real name. Either direction reads or writes directly to disk rather than buffering the whole file in memory, so transfer size is bounded by the library's quota and your local disk, not by RAM.
+
+Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in progress and cleans up after itself: a partial download is discarded, and an aborted upload session is cancelled on the server.
 
 ## Building
 
 ```
 go build -o xftp ./cmd/xftp
 go build -o xcp ./cmd/xcp
+go build -o xsync ./cmd/xsync
 go build -o xfind ./cmd/xfind
 go build -o xtree ./cmd/xtree
 ```
-
-## Large files
-
-Files up to 250 MB upload in a single request. Above that, xftp opens a Graph upload session and streams the file in 10 MiB chunks. Downloads stream straight to disk as well, into a temporary file that's renamed into place only once the transfer completes, so an interrupted download never leaves a corrupt file at the real name. Either direction reads or writes directly to disk rather than buffering the whole file in memory, so transfer size is bounded by the library's quota and your local disk, not by RAM.
-
-Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in progress and cleans up after itself: a partial download is discarded, and an aborted upload session is cancelled on the server.
 
 ---
 

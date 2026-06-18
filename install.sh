@@ -1,5 +1,5 @@
 #!/bin/sh
-# xftp installer — fetches the latest release binaries (xftp and its companions
+# xfiles installer — fetches the latest release binaries (xftp and its companions
 # xcp, xfind, xtree, and xsync) for the host platform and drops them into /usr/local/bin
 # (or ~/.local/bin if /usr/local/bin is not writable). POSIX sh, no bash extensions.
 #
@@ -7,8 +7,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sh
 #
 # Environment variables:
-#   XFTP_INSTALL_DIR   Override install directory (e.g. /opt/bin or $HOME/bin)
-#   XFTP_VERSION       Install a specific release tag (e.g. v1.0.0) instead of latest
+#   XFILES_INSTALL_DIR   Override install directory (e.g. /opt/bin or $HOME/bin)
+#   XFILES_VERSION       Install a specific release tag (e.g. v1.0.0) instead of latest
 
 set -eu
 
@@ -34,7 +34,7 @@ detect_platform() {
 	ARCH=$(uname -m)
 	case "$OS" in
 		linux|darwin) ;;
-		*) err "unsupported OS: $OS (xftp ships linux + darwin binaries)";;
+		*) err "unsupported OS: $OS (xfiles ships linux + darwin binaries)";;
 	esac
 	case "$ARCH" in
 		x86_64|amd64) ARCH=amd64 ;;
@@ -45,9 +45,9 @@ detect_platform() {
 }
 
 resolve_version() {
-	if [ -n "${XFTP_VERSION:-}" ]; then
-		VERSION="$XFTP_VERSION"
-		say "Installing xftp $VERSION (pinned via XFTP_VERSION)"
+	if [ -n "${XFILES_VERSION:-}" ]; then
+		VERSION="$XFILES_VERSION"
+		say "Installing xfiles $VERSION (pinned via XFILES_VERSION)"
 		return
 	fi
 	# Resolve the latest tag via the GitHub API. The web /releases/latest
@@ -61,7 +61,7 @@ resolve_version() {
 	if [ -z "${VERSION:-}" ]; then
 		err "could not resolve latest release tag from GitHub"
 	fi
-	say "Installing xftp $VERSION (latest)"
+	say "Installing xfiles $VERSION (latest)"
 }
 
 detect_existing() {
@@ -74,8 +74,8 @@ detect_existing() {
 }
 
 pick_install_dir() {
-	if [ -n "${XFTP_INSTALL_DIR:-}" ]; then
-		INSTALL_DIR="$XFTP_INSTALL_DIR"
+	if [ -n "${XFILES_INSTALL_DIR:-}" ]; then
+		INSTALL_DIR="$XFILES_INSTALL_DIR"
 	elif [ -n "$EXISTING_DIR" ]; then
 		# An existing install wins over the default — upgrade in place rather
 		# than scattering a second copy into a directory earlier on PATH.
@@ -97,7 +97,7 @@ pick_install_dir() {
 			err "existing install at $EXISTING_PATH is not writable; re-run as
        curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo sh"
 		fi
-		err "$INSTALL_DIR is not writable; either set XFTP_INSTALL_DIR to a
+		err "$INSTALL_DIR is not writable; either set XFILES_INSTALL_DIR to a
        writable directory, or re-run as
        curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo sh"
 	fi
