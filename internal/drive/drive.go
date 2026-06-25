@@ -49,6 +49,11 @@ type Item struct {
 	ChildCount   int
 	LastModified time.Time
 	FSModified   time.Time
+	// QuickXorHash is SharePoint's content hash for a file, base64-encoded as
+	// Graph returns it; empty for folders and for files whose hash the service
+	// has not yet computed. xsync uses it to settle a size-equal/mtime-diverged
+	// comparison by content instead of re-transferring on a timestamp alone.
+	QuickXorHash string
 }
 
 // parseSiteURL splits a SharePoint URL into its hostname, server-relative site
@@ -347,7 +352,11 @@ type driveItemJSON struct {
 	Folder               *struct {
 		ChildCount int `json:"childCount"`
 	} `json:"folder"`
-	File           *json.RawMessage `json:"file"`
+	File *struct {
+		Hashes struct {
+			QuickXorHash string `json:"quickXorHash"`
+		} `json:"hashes"`
+	} `json:"file"`
 	FileSystemInfo *struct {
 		LastModifiedDateTime string `json:"lastModifiedDateTime"`
 	} `json:"fileSystemInfo"`
@@ -367,6 +376,9 @@ func (j driveItemJSON) toItem() Item {
 		if t, err := time.Parse(time.RFC3339, j.FileSystemInfo.LastModifiedDateTime); err == nil {
 			it.FSModified = t
 		}
+	}
+	if j.File != nil {
+		it.QuickXorHash = j.File.Hashes.QuickXorHash
 	}
 	return it
 }

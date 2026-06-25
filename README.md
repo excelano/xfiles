@@ -138,7 +138,7 @@ Pull a library folder down to a local directory:
 xsync "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports" ./reports
 ```
 
-Only files that are new or changed are transferred, compared by size and modification time, so a second run with nothing changed transfers nothing. To make that comparison hold across runs, xsync records each uploaded file's modification time on the SharePoint side and restores the local modification time on download, so unchanged files aren't re-sent.
+Only files that are new or changed are transferred, compared by size and modification time, so a second run with nothing changed transfers nothing. To make that comparison hold across runs, xsync records each uploaded file's modification time on the SharePoint side and restores the local modification time on download. When a file is the same size but its timestamps disagree — which happens on document libraries that don't preserve the recorded time — xsync compares SharePoint's QuickXorHash against the same hash computed locally before deciding, so a file is never re-sent on a drifted timestamp alone, and never wrongly skipped when its contents actually changed.
 
 By default xsync only adds and updates; it never deletes. Pass `--delete` to make the destination an exact mirror, removing items that no longer exist in the source — when run in a terminal it asks for confirmation first. Pass `--dry-run` (`-n`) to print the full plan and change nothing, which is the safe way to preview a `--delete`:
 

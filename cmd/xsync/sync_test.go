@@ -119,7 +119,8 @@ func TestPlan(t *testing.T) {
 	base := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 	source := map[string]fileEntry{
 		"keep.txt":      {rel: "keep.txt", size: 5, mtime: base},
-		"changed.txt":   {rel: "changed.txt", size: 9, mtime: base}, // size differs
+		"changed.txt":   {rel: "changed.txt", size: 9, mtime: base},                // size differs
+		"touched.txt":   {rel: "touched.txt", size: 6, mtime: base.Add(time.Hour)}, // same size, mtime moved
 		"new.txt":       {rel: "new.txt", size: 3, mtime: base},
 		"sub":           {rel: "sub", isDir: true},
 		"sub/deep":      {rel: "sub/deep", isDir: true},
@@ -129,6 +130,7 @@ func TestPlan(t *testing.T) {
 	dest := map[string]fileEntry{
 		"keep.txt":    {rel: "keep.txt", size: 5, mtime: base},
 		"changed.txt": {rel: "changed.txt", size: 4, mtime: base},
+		"touched.txt": {rel: "touched.txt", size: 6, mtime: base},
 		"conflict":    {rel: "conflict", isDir: true},
 		"gone.txt":    {rel: "gone.txt", size: 7, mtime: base},
 		"oldsub":      {rel: "oldsub", isDir: true},
@@ -136,13 +138,17 @@ func TestPlan(t *testing.T) {
 		"oldsub/b":    {rel: "oldsub/b", size: 1, mtime: base},
 	}
 
-	mkdirs, copies, deletes, conflicts, upToDate := plan(source, dest, true)
+	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, true)
 
 	if got := relsOf(mkdirs); !eqStrings(got, []string{"sub", "sub/deep"}) {
 		t.Errorf("mkdirs = %v, want [sub sub/deep]", got)
 	}
 	if got := relsOf(copies); !eqStrings(got, []string{"changed.txt", "new.txt", "sub/deep/n.md"}) {
 		t.Errorf("copies = %v, want [changed.txt new.txt sub/deep/n.md]", got)
+	}
+	// Same size, only the mtime moved: deferred to a content-hash check, not copied.
+	if got := relsOf(verify); !eqStrings(got, []string{"touched.txt"}) {
+		t.Errorf("verify = %v, want [touched.txt]", got)
 	}
 	// gone.txt and the oldsub subtree are missing from source. oldsub's children
 	// must collapse into the single top-most oldsub delete.
@@ -157,7 +163,7 @@ func TestPlan(t *testing.T) {
 	}
 
 	// Without --delete, nothing is removed.
-	_, _, dels, _, _ := plan(source, dest, false)
+	_, _, _, dels, _, _ := plan(source, dest, false)
 	if len(dels) != 0 {
 		t.Errorf("deletes without --delete = %v, want none", relsOf(dels))
 	}
@@ -171,7 +177,7 @@ func TestPlanMkdirOrdering(t *testing.T) {
 		"a":     {rel: "a", isDir: true},
 		"a/b":   {rel: "a/b", isDir: true},
 	}
-	mkdirs, _, _, _, _ := plan(source, map[string]fileEntry{}, false)
+	mkdirs, _, _, _, _, _ := plan(source, map[string]fileEntry{}, false)
 	got := relsOf(mkdirs)
 	if !sort.SliceIsSorted(got, func(i, j int) bool { return depth(got[i]) < depth(got[j]) }) {
 		t.Errorf("mkdirs not parent-first: %v", got)

@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.7.2
+	github.com/excelano/quickxorhash v1.0.0
 	github.com/peterh/liner v1.2.2
 	golang.org/x/term v0.27.0
 )

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/excelano/quickxorhash"
 	"golang.org/x/term"
 
 	"github.com/excelano/xfiles/internal/drive"
@@ -34,6 +37,9 @@ type fileEntry struct {
 	isDir bool
 	size  int64
 	mtime time.Time
+	// hash is SharePoint's QuickXorHash, set only on entries scanned from the
+	// remote side; the local scan leaves it empty and computes a hash on demand.
+	hash string
 }
 
 // opKind is the verb of a planned change, interpreted against whichever side is
@@ -118,7 +124,22 @@ func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir
 		return 1
 	}
 
-	mkdirs, copies, deletes, conflicts, upToDate := plan(source, dest, doDelete)
+	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, doDelete)
+
+	// Settle the size-equal/mtime-diverged candidates by content hash. The remote
+	// side carries SharePoint's QuickXorHash either way; matches are already in
+	// sync, mismatches join the copies. Hashing is read-only, so it runs on a dry
+	// run too, keeping the previewed plan honest.
+	if len(verify) > 0 {
+		remote := dest
+		if dir == download {
+			remote = source
+		}
+		moreCopies, verified := resolveVerify(ctx, g, d, dir, localDir, remoteRoot, verify, remote, dryRun)
+		copies = append(copies, moreCopies...)
+		sort.Slice(copies, func(i, j int) bool { return copies[i].rel < copies[j].rel })
+		upToDate += verified
+	}
 
 	for _, c := range conflicts {
 		fmt.Fprintf(os.Stderr, "skipping (type conflict): %s\n", c)
@@ -288,8 +309,9 @@ func scanLocal(root string) (map[string]fileEntry, error) {
 	return m, err
 }
 
-// scanRemote walks a SharePoint folder tree into a relative-path map, comparing
-// by size and the writable fileSystemInfo mtime.
+// scanRemote walks a SharePoint folder tree into a relative-path map, recording
+// size, the writable fileSystemInfo mtime, and the QuickXorHash used as a
+// content-level tiebreaker when the mtime alone is inconclusive.
 func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root string) (map[string]fileEntry, error) {
 	m := map[string]fileEntry{}
 	err := d.Walk(ctx, g, root, func(it drive.Item, p string, _ int, _ bool) bool {
@@ -297,7 +319,7 @@ func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root
 		if it.IsFolder {
 			m[rel] = fileEntry{rel: rel, isDir: true}
 		} else {
-			m[rel] = fileEntry{rel: rel, size: it.Size, mtime: it.FSModified}
+			m[rel] = fileEntry{rel: rel, size: it.Size, mtime: it.FSModified, hash: it.QuickXorHash}
 		}
 		return true
 	})
@@ -309,9 +331,13 @@ func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root
 
 // plan diffs the source tree against the destination tree, producing the
 // directories to create, files to copy, and (when doDelete) destination items to
-// remove. Directory creations sort parents-first; deletions keep only the
-// top-most missing path of each removed subtree.
-func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, deletes []op, conflicts []string, upToDate int) {
+// remove. A file the cheap size+mtime test flags as changed, but whose size is
+// unchanged, goes into verify rather than copies: only its timestamp moved, which
+// on some tenants happens because the post-upload mtime stamp did not survive, so
+// the caller settles it by content hash before re-transferring. Directory
+// creations sort parents-first; deletions keep only the top-most missing path of
+// each removed subtree.
+func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, verify, deletes []op, conflicts []string, upToDate int) {
 	for rel, s := range source {
 		dst, exists := dest[rel]
 		if s.isDir {
@@ -331,6 +357,10 @@ func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, del
 			}
 			if !differs(s, dst) {
 				upToDate++
+				continue
+			}
+			if s.size == dst.size {
+				verify = append(verify, op{kind: opCopy, rel: rel, size: s.size, mtime: s.mtime})
 				continue
 			}
 		}
@@ -360,7 +390,7 @@ func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, del
 	})
 	sort.Slice(copies, func(i, j int) bool { return copies[i].rel < copies[j].rel })
 	sort.Slice(deletes, func(i, j int) bool { return deletes[i].rel < deletes[j].rel })
-	return mkdirs, copies, deletes, conflicts, upToDate
+	return mkdirs, copies, verify, deletes, conflicts, upToDate
 }
 
 // printPlan lists every planned change, one per line, with a direction-aware
@@ -455,6 +485,57 @@ func applyCopy(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir d
 		fmt.Fprintf(os.Stderr, "warning: could not set mtime on %s: %v\n", o.rel, err)
 	}
 	return nil
+}
+
+// resolveVerify decides each same-size/mtime-diverged candidate by content hash,
+// turning an inconclusive timestamp into a definite answer. It hashes the local
+// file with QuickXorHash and compares it to the remote item's hash (the remote
+// side always carries one). A match is already in sync; on a real run it re-stamps
+// the mtime on the side that drifted so the next run hits the cheap fast path. A
+// mismatch — or a remote item with no hash computed yet — is returned as a copy.
+func resolveVerify(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, verify []op, remote map[string]fileEntry, dryRun bool) (copies []op, verified int) {
+	for _, o := range verify {
+		localPath := filepath.Join(localRoot, filepath.FromSlash(o.rel))
+		want := remote[o.rel].hash
+		got, err := localQuickXor(localPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: hashing %s: %v\n", o.rel, err)
+		}
+		if want == "" || got == "" || got != want {
+			copies = append(copies, o)
+			continue
+		}
+		// Content matches; only the timestamp was off. Re-stamp the drifted side so
+		// the comparison fast-paths next time. Best effort — on a tenant that does
+		// not honour the stamp this just repeats the cheap hash on the next run.
+		if !dryRun {
+			if dir == upload {
+				err = d.SetMTime(ctx, g, path.Join(remoteRoot, o.rel), o.mtime)
+			} else {
+				err = os.Chtimes(localPath, o.mtime, o.mtime)
+			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not set mtime on %s: %v\n", o.rel, err)
+			}
+		}
+		verified++
+	}
+	return copies, verified
+}
+
+// localQuickXor computes the base64 QuickXorHash of a local file, matching the
+// encoding SharePoint reports so the two values can be compared directly.
+func localQuickXor(name string) (string, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := quickxorhash.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
 }
 
 func applyDelete(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
