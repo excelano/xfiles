@@ -161,14 +161,12 @@ func run() int {
 
 	var dirs, files int
 	var ancestorLast []bool
-	walkErr := d.Walk(tctx, g, root, func(it drive.Item, _ string, depth int, isLast bool) bool {
-		if !(*dirsOnly && !it.IsFolder) {
-			fmt.Fprintf(out, "%s%s%s\n", treePrefix(ancestorLast[:depth-1]), connector(isLast), it.Name)
-			if it.IsFolder {
-				dirs++
-			} else {
-				files++
-			}
+	walkErr := d.Walk(tctx, g, root, *dirsOnly, func(it drive.Item, _ string, depth int, isLast bool) bool {
+		fmt.Fprintf(out, "%s%s%s\n", treePrefix(ancestorLast[:depth-1]), connector(isLast), it.Name)
+		if it.IsFolder {
+			dirs++
+		} else {
+			files++
 		}
 		// Record this node's last-ness at its depth so its children can draw the
 		// correct guide above themselves.

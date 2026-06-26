@@ -424,24 +424,38 @@ func SortChildren(items []Item) {
 // can draw └── vs ├──). When visit returns false for a folder, the walk does not
 // descend into it — that's how depth and type filters prune the traversal. A
 // List failure on any folder stops the walk and is returned.
-func (d *Drive) Walk(ctx context.Context, g *spauth.GraphClient, root string,
+//
+// When foldersOnly is set, files are dropped from each listing before visiting,
+// so isLast reflects the last *folder* in a directory rather than the last item.
+// A tree drawn from a folders-only walk would otherwise mark the last subfolder
+// with ├── whenever a file sorts after it but goes unshown.
+func (d *Drive) Walk(ctx context.Context, g *spauth.GraphClient, root string, foldersOnly bool,
 	visit func(it Item, itemPath string, depth int, isLast bool) (descend bool)) error {
-	return d.walkDir(ctx, g, root, 1, visit)
+	return d.walkDir(ctx, g, root, 1, foldersOnly, visit)
 }
 
-func (d *Drive) walkDir(ctx context.Context, g *spauth.GraphClient, dir string, depth int,
+func (d *Drive) walkDir(ctx context.Context, g *spauth.GraphClient, dir string, depth int, foldersOnly bool,
 	visit func(it Item, itemPath string, depth int, isLast bool) bool) error {
 	items, err := d.List(ctx, g, dir)
 	if err != nil {
 		return fmt.Errorf("listing /%s: %w", strings.Trim(dir, "/"), err)
 	}
 	SortChildren(items)
+	if foldersOnly {
+		folders := items[:0]
+		for _, it := range items {
+			if it.IsFolder {
+				folders = append(folders, it)
+			}
+		}
+		items = folders
+	}
 	for i, it := range items {
 		p := path.Join(dir, it.Name)
 		isLast := i == len(items)-1
 		descend := visit(it, p, depth, isLast)
 		if it.IsFolder && descend {
-			if err := d.walkDir(ctx, g, p, depth+1, visit); err != nil {
+			if err := d.walkDir(ctx, g, p, depth+1, foldersOnly, visit); err != nil {
 				return err
 			}
 		}

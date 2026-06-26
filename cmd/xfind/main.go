@@ -180,7 +180,8 @@ func run() int {
 	root := d.StartPath
 	var matchErr error
 	out := bufio.NewWriter(os.Stdout)
-	walkErr := d.Walk(tctx, g, root, func(it drive.Item, p string, depth int, _ bool) bool {
+	// With -type d we never emit files, so skip listing them entirely.
+	walkErr := d.Walk(tctx, g, root, c.typ == "d", func(it drive.Item, p string, depth int, _ bool) bool {
 		if ok, err := c.match(it); err != nil {
 			matchErr = err
 		} else if ok {

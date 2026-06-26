@@ -314,7 +314,7 @@ func scanLocal(root string) (map[string]fileEntry, error) {
 // content-level tiebreaker when the mtime alone is inconclusive.
 func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root string) (map[string]fileEntry, error) {
 	m := map[string]fileEntry{}
-	err := d.Walk(ctx, g, root, func(it drive.Item, p string, _ int, _ bool) bool {
+	err := d.Walk(ctx, g, root, false, func(it drive.Item, p string, _ int, _ bool) bool {
 		rel := relTo(root, p)
 		if it.IsFolder {
 			m[rel] = fileEntry{rel: rel, isDir: true}
