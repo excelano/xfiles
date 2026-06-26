@@ -23,6 +23,14 @@ sudo apt install xfiles
 
 `xfiles` is a metapackage that pulls in all five tools. To install just one, name it instead — `sudo apt install xsync`, for example.
 
+With [Homebrew](https://brew.sh) on macOS or Linux, so `brew upgrade` keeps them current. There's no metapackage, so name the tools — all five, or just the ones you want:
+
+```sh
+brew tap excelano/tap
+brew trust excelano/tap   # one-time: Homebrew gates third-party taps behind explicit trust
+brew install xftp xcp xsync xfind xtree
+```
+
 On other platforms, the install script fetches prebuilt binaries (Linux and macOS, x86_64 and arm64) and drops all five into one directory:
 
 ```
