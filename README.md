@@ -210,6 +210,20 @@ Files up to 250 MB upload in a single request. Above that, the transfer opens a 
 
 Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in progress and cleans up after itself: a partial download is discarded, and an aborted upload session is cancelled on the server.
 
+## Use it from Claude Code
+
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `cp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which of the five tools to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's QuickXorHash change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
+
+```sh
+mkdir -p ~/.claude/skills/xfiles
+for f in SKILL.md reference.md; do
+  curl -fsSL "https://raw.githubusercontent.com/excelano/xfiles/main/skills/xfiles/$f" \
+    -o ~/.claude/skills/xfiles/$f
+done
+```
+
+Or, from a clone of this repo, `cp -r skills/xfiles ~/.claude/skills/`.
+
 ## Building
 
 ```
