@@ -137,7 +137,7 @@ Download a file from a library to the current directory:
 xcp "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/Q1 Plan.xlsx" ./
 ```
 
-The destination follows `cp`/`scp` habits. On upload, a URL that points at a folder copies the file into it under its own name, a URL that points at an existing file overwrites it, and any other path is taken as the new name. On download, a destination that is an existing directory receives the file under its remote name, and otherwise the destination is the path to write.
+The destination follows `scp` habits. On upload, a URL that points at a folder copies the file into it under its own name, a URL that points at an existing file overwrites it, and any other path is taken as the new name. On download, a destination that is an existing directory receives the file under its remote name, and otherwise the destination is the path to write.
 
 Use `-` as the local side to stream instead of naming a file. A `-` destination cats the remote file to stdout, which keeps the byte stream clean for piping; a `-` source uploads from stdin, in which case the URL must name the target file since stdin has no name of its own:
 
@@ -212,7 +212,7 @@ Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in prog
 
 ## Use it from Claude Code
 
-xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `cp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which of the five tools to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's QuickXorHash change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which of the five tools to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's QuickXorHash change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
 
 ```sh
 mkdir -p ~/.claude/skills/xfiles
