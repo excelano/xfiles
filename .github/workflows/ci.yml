@@ -1,0 +1,48 @@
+name: ci
+
+# Formats, vets, and runs the tests on every push and PR against main.
+#
+# Without this the test suite only ever ran on a developer's laptop: CodeQL is
+# static analysis and never compiles a test, and the release workflow's only
+# pre-build hook is `go mod tidy`. A commit that broke a test could be tagged,
+# released, and promoted to apt behind a green checkmark — and Dependabot's
+# weekly dependency bumps merged without anything having exercised the code
+# against the new versions.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Vet and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      # gofmt exits 0 whether or not it found anything, so the printed file
+      # list is the signal: any output at all means something is unformatted.
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
