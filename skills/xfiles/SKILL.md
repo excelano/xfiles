@@ -72,7 +72,7 @@ every tool accepts.
 
 ## Auth and consent (shared across the family)
 
-All five tools — plus the sibling [xql](https://github.com/excelano/xql) — share one
+Every tool in the suite — plus the sibling [xql](https://github.com/excelano/xql) — shares one
 multi-tenant Entra app registration and one delegated scope, `Sites.ReadWrite.All`.
 Authentication is **device-code**: the first connection prints a short code and a URL,
 you sign in once in a browser, and the refresh token is cached under `~/.config/<tool>`

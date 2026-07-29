@@ -16,7 +16,7 @@ This repository ships five CLIs that run locally on your machine: `xftp` (intera
 
 Downloads stream to a temporary file in the destination directory and are renamed into place only on success; uploads larger than 250 MB go through a Graph upload session, which is cancelled on the server if the transfer is interrupted. `xsync`'s `--delete` flag removes destination items that no longer exist in the source; on an interactive terminal it asks for confirmation first, and `--dry-run` previews the full plan without changing anything.
 
-IT administrators evaluating any of these tools for a Microsoft 365 tenant will find the application's registration details, the delegated-permission risk profile, and the consent and revocation steps in [ADMINS.md](ADMINS.md). All five tools share one app registration, so a single consent covers them all.
+IT administrators evaluating any of these tools for a Microsoft 365 tenant will find the application's registration details, the delegated-permission risk profile, and the consent and revocation steps in [ADMINS.md](ADMINS.md). Every tool in the suite shares one app registration, so a single consent covers them all.
 
 ## What the tools store
 

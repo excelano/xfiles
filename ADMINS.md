@@ -2,7 +2,7 @@
 
 This page is for the person who approves applications in a Microsoft 365 tenant. If a colleague has asked you to allow xftp, everything you need to make that decision is below.
 
-xftp is a command-line tool that gives a SharePoint document library the feel of an FTP session. It runs locally on the user's own machine, signs in as that user through Microsoft's device-code flow, and talks to SharePoint over the Microsoft Graph API. There is no server, no daemon, no background process, and no service account. It can do nothing the signed-in user could not already do in SharePoint Online through a browser. The same repository ships four companions — xcp (a one-shot, scp-style copy), xsync (a recursive rsync-style mirror), and the read-only xfind and xtree (recursive listing) — which use the identical application registration and the identical delegated permission; everything on this page applies equally to all five.
+xftp is a command-line tool that gives a SharePoint document library the feel of an FTP session. It runs locally on the user's own machine, signs in as that user through Microsoft's device-code flow, and talks to SharePoint over the Microsoft Graph API. There is no server, no daemon, no background process, and no service account. It can do nothing the signed-in user could not already do in SharePoint Online through a browser. The same repository ships companion tools — xcp (a one-shot, scp-style copy), xsync (a recursive rsync-style mirror), and the read-only xfind and xtree (recursive listing) — which use the identical application registration and the identical delegated permission. Everything on this page applies equally to all of them.
 
 ## The application you would be approving
 
@@ -18,7 +18,7 @@ xftp authenticates through a multi-tenant Microsoft Entra application published 
 | Requested permission | Microsoft Graph `Sites.ReadWrite.All` |
 | Permission type | Delegated |
 
-Excelano LLC is a Microsoft-verified publisher, so the consent screen and the enterprise application record both show the publisher name with a verified badge rather than the unverified-publisher warning. The same registration backs all five tools in this repository — xftp, xcp, xsync, xfind, and xtree — as well as the sibling tool [xql](https://github.com/excelano/xql), so a single consent decision covers them all. Granting or blocking one grants or blocks them all.
+Excelano LLC is a Microsoft-verified publisher, so the consent screen and the enterprise application record both show the publisher name with a verified badge rather than the unverified-publisher warning. The same registration backs every tool in this repository, as well as the sibling tool [xql](https://github.com/excelano/xql), so a single consent decision covers them all. Granting or blocking one grants or blocks them all.
 
 ## What the delegated permission means
 

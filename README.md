@@ -10,7 +10,7 @@ xfiles is a family of command-line tools that give a SharePoint document library
 | `xfind` | find | Walk a library and print matching paths, filtered by name, type, or depth. |
 | `xtree` | tree | Print a library as an indented tree with a directory and file count. |
 
-Each is a single static Go binary with no daemon and no mounted filesystem. Authentication is device-code OAuth shared across the whole suite: the first time a tool connects it prints a short code and a URL, you sign in once in a browser, and the refresh token is cached under `~/.config` so later runs are silent. All five share one app registration, so a single consent covers the family (and the sibling tool [xql](https://github.com/excelano/xql)).
+Each is a single static Go binary with no daemon and no mounted filesystem. Authentication is device-code OAuth shared across the whole suite: the first time a tool connects it prints a short code and a URL, you sign in once in a browser, and the refresh token is cached under `~/.config` so later runs are silent. Every tool in the suite shares one app registration, so a single consent covers the family (and the sibling tool [xql](https://github.com/excelano/xql)).
 
 ## Install
 
@@ -28,7 +28,7 @@ Then install the whole suite as a single metapackage, so `apt upgrade` keeps eve
 sudo apt install xfiles
 ```
 
-`xfiles` is a metapackage that pulls in all five tools. To install just one, name it instead — `sudo apt install xsync`, for example.
+`xfiles` is a metapackage that pulls in the whole suite. To install just one, name it instead — `sudo apt install xsync`, for example.
 
 ### Homebrew
 
@@ -39,7 +39,7 @@ brew tap excelano/tap
 brew trust excelano/tap
 ```
 
-There's no metapackage, so name the tools — all five, or just the ones you want. `brew upgrade` keeps them current:
+There's no metapackage, so name the tools you want. `brew upgrade` keeps them current:
 
 ```sh
 brew install xftp xcp xsync xfind xtree
@@ -47,7 +47,7 @@ brew install xftp xcp xsync xfind xtree
 
 ### Prebuilt binary (Linux and macOS, x86_64 and arm64)
 
-The install script fetches prebuilt binaries and drops all five into one directory:
+The install script fetches prebuilt binaries and drops the whole suite into one directory:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sh
@@ -59,7 +59,7 @@ If the installer needs to write to a root-owned directory like `/usr/local/bin`,
 curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sudo sh
 ```
 
-Pin a version with `XFILES_VERSION=v1.5.0`, or install elsewhere with `XFILES_INSTALL_DIR=$HOME/bin`. To uninstall, run the matching `uninstall.sh` the same way, which removes all five binaries.
+Pin a version by setting `XFILES_VERSION` to any release tag, or install elsewhere with `XFILES_INSTALL_DIR=$HOME/bin`. To uninstall, run the matching `uninstall.sh` the same way, which removes them again.
 
 ### Go
 
@@ -218,7 +218,7 @@ Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in prog
 
 ## Use it from Claude Code
 
-xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which of the five tools to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which tool to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
 
 ```sh
 mkdir -p ~/.claude/skills/xfiles
