@@ -52,23 +52,49 @@ const (
 	opDelete               // remove a destination item missing from the source
 )
 
+// Reason codes explain why a file was scheduled for transfer; --itemize-changes
+// prints them beside the verb. They exist because the failure this comparison
+// guards against — a destination that silently rewrites what you uploaded — is
+// invisible in a bare "upload <path>" line, and took a manual unzip of the
+// remote copy to diagnose the first time. rsync's -i flag string is the model.
+const (
+	reasonNew     = "new"     // no counterpart on the destination
+	reasonTime    = "time"    // mtime moved beyond modWindow
+	reasonContent = "content" // mtime moved, size matched, content hash differed
+	reasonForced  = "forced"  // --ignore-times bypassed the comparison
+)
+
 // op is a single planned change at a mirror-relative path. mtime is the source
 // file's modification time, stamped onto the destination after a copy so the
-// next run sees the two as equal.
+// next run sees the two as equal. reason is set on copies only.
 type op struct {
-	kind  opKind
-	rel   string
-	isDir bool
-	size  int64
-	mtime time.Time
+	kind   opKind
+	rel    string
+	isDir  bool
+	size   int64
+	mtime  time.Time
+	reason string
 }
 
-// differs reports whether two files should be considered changed: any size
-// difference, or an mtime gap wider than modWindow.
+// differs reports whether two files should be considered changed. The mtime is
+// authoritative and the size is deliberately NOT consulted here.
+//
+// SharePoint rewrites Office documents on upload to bind them to the library's
+// content type, injecting customXml parts and a ContentTypeId so the stored file
+// is permanently larger than the source and hashes differently. A size test
+// therefore reports every .docx/.xlsx/.pptx as changed on every run, cutting a
+// new document version each time — and it short-circuits before any content hash
+// can settle the question. The writable fileSystemInfo mtime is the one field
+// that survives the rewrite and still tracks real edits: verified against a live
+// library, where an edit made in Word for the web moved it.
+//
+// So an mtime match within modWindow means in sync, and size only enters the
+// picture in plan() once the timestamp says something moved. The cost is a local
+// file whose content and size change while its mtime stays put — a restore from
+// backup, cp -p, a timestamp-preserving tar -x — which reads as unchanged where
+// rsync's size+mtime check would have caught it. --ignore-times forces the
+// transfer when that happens.
 func differs(a, b fileEntry) bool {
-	if a.size != b.size {
-		return true
-	}
 	d := a.mtime.Sub(b.mtime)
 	if d < 0 {
 		d = -d
@@ -110,7 +136,7 @@ func hasAncestorIn(rel string, set map[string]bool) bool {
 // runSync binds the library, scans both trees, plans the changes, and (after a
 // confirmation when deletions are involved) applies them. It returns a process
 // exit code.
-func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir, url, library string, dryRun, doDelete bool) int {
+func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir, url, library string, dryRun, doDelete, ignoreTimes, itemize bool) int {
 	d, err := drive.ResolveDrive(ctx, g, url, library)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind library: %v\n", err)
@@ -124,7 +150,7 @@ func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir
 		return 1
 	}
 
-	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, doDelete)
+	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, doDelete, ignoreTimes)
 
 	// Settle the size-equal/mtime-diverged candidates by content hash. The remote
 	// side carries SharePoint's QuickXorHash either way; matches are already in
@@ -153,7 +179,7 @@ func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir
 	if dryRun {
 		fmt.Println("Dry run — no changes will be made:")
 	}
-	printPlan(dir, mkdirs, copies, deletes)
+	printPlan(dir, itemize, mkdirs, copies, deletes)
 
 	if dryRun {
 		fmt.Printf("\nWould change: %d created, %d copied, %d deleted (%d up to date).\n",
@@ -331,13 +357,14 @@ func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root
 
 // plan diffs the source tree against the destination tree, producing the
 // directories to create, files to copy, and (when doDelete) destination items to
-// remove. A file the cheap size+mtime test flags as changed, but whose size is
-// unchanged, goes into verify rather than copies: only its timestamp moved, which
-// on some tenants happens because the post-upload mtime stamp did not survive, so
-// the caller settles it by content hash before re-transferring. Directory
-// creations sort parents-first; deletions keep only the top-most missing path of
-// each removed subtree.
-func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, verify, deletes []op, conflicts []string, upToDate int) {
+// remove. A file whose mtime moved but whose size is unchanged goes into verify
+// rather than copies: only its timestamp shifted, which on some tenants happens
+// because the post-upload mtime stamp did not survive, so the caller settles it
+// by content hash before re-transferring. ignoreTimes skips the comparison
+// entirely and schedules every existing file, the escape hatch for a local edit
+// that left the mtime untouched. Directory creations sort parents-first;
+// deletions keep only the top-most missing path of each removed subtree.
+func plan(source, dest map[string]fileEntry, doDelete, ignoreTimes bool) (mkdirs, copies, verify, deletes []op, conflicts []string, upToDate int) {
 	for rel, s := range source {
 		dst, exists := dest[rel]
 		if s.isDir {
@@ -350,21 +377,26 @@ func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, ver
 			mkdirs = append(mkdirs, op{kind: opMkdir, rel: rel, isDir: true})
 			continue
 		}
+		reason := reasonNew
 		if exists {
 			if dst.isDir {
 				conflicts = append(conflicts, rel+" (file in source, folder in destination)")
 				continue
 			}
-			if !differs(s, dst) {
+			switch {
+			case ignoreTimes:
+				reason = reasonForced
+			case !differs(s, dst):
 				upToDate++
 				continue
-			}
-			if s.size == dst.size {
-				verify = append(verify, op{kind: opCopy, rel: rel, size: s.size, mtime: s.mtime})
+			case s.size == dst.size:
+				verify = append(verify, op{kind: opCopy, rel: rel, size: s.size, mtime: s.mtime, reason: reasonTime})
 				continue
+			default:
+				reason = reasonTime
 			}
 		}
-		copies = append(copies, op{kind: opCopy, rel: rel, size: s.size, mtime: s.mtime})
+		copies = append(copies, op{kind: opCopy, rel: rel, size: s.size, mtime: s.mtime, reason: reason})
 	}
 
 	if doDelete {
@@ -394,25 +426,37 @@ func plan(source, dest map[string]fileEntry, doDelete bool) (mkdirs, copies, ver
 }
 
 // printPlan lists every planned change, one per line, with a direction-aware
-// verb for copies (upload vs download).
-func printPlan(dir direction, mkdirs, copies, deletes []op) {
+// verb for copies (upload vs download). When itemize is set each copy also
+// carries its reason code, so "why is this being sent again?" is answerable from
+// the output instead of by inspecting the remote copy by hand.
+func printPlan(dir direction, itemize bool, mkdirs, copies, deletes []op) {
 	for _, o := range mkdirs {
-		fmt.Printf("%-8s %s/\n", "mkdir", o.rel)
+		printOp(itemize, "mkdir", "", o.rel+"/")
 	}
 	verb := "upload"
 	if dir == download {
 		verb = "download"
 	}
 	for _, o := range copies {
-		fmt.Printf("%-8s %s\n", verb, o.rel)
+		printOp(itemize, verb, o.reason, o.rel)
 	}
 	for _, o := range deletes {
 		suffix := ""
 		if o.isDir {
 			suffix = "/"
 		}
-		fmt.Printf("%-8s %s%s\n", "delete", o.rel, suffix)
+		printOp(itemize, "delete", "", o.rel+suffix)
 	}
+}
+
+// printOp writes one plan line, with the reason column only when itemizing so
+// the default output stays as narrow as it was.
+func printOp(itemize bool, verb, reason, path string) {
+	if itemize {
+		fmt.Printf("%-8s %-8s %s\n", verb, reason, path)
+		return
+	}
+	fmt.Printf("%-8s %s\n", verb, path)
 }
 
 // result tallies what execute actually did, so the summary reflects completed
@@ -502,6 +546,7 @@ func resolveVerify(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, d
 			fmt.Fprintf(os.Stderr, "warning: hashing %s: %v\n", o.rel, err)
 		}
 		if want == "" || got == "" || got != want {
+			o.reason = reasonContent
 			copies = append(copies, o)
 			continue
 		}

@@ -72,14 +72,20 @@ Exactly one side is a URL; that side sets direction. Only new/changed files tran
 | `--dry-run`, `-n` | print the full plan, change nothing (the safe way to preview `--delete`) |
 | `--delete` | make the destination an exact mirror, removing what's gone from the source; confirms in a terminal |
 | `--library <NAME>` | force the library |
+| `--ignore-times`, `-I` | transfer every file, skipping the timestamp comparison |
+| `--itemize-changes`, `-i` | label each line with why it was picked: `new`, `time`, `content`, `forced` |
 | `-V` / `--version`, `-h` / `--help` | standard |
 
-**Change detection:** compare by size + mtime first; xsync records each uploaded file's
-mtime on the SharePoint side and restores the local mtime on download so that hold
-across runs. On a **same-size, disagreeing-timestamp** file it falls back to comparing
-**QuickXorHash** on both sides before deciding — so no re-send on a drifted timestamp,
-no wrong skip on genuinely changed bytes. Default is add/update only; deletion requires
-`--delete`. Token cache: `~/.config/xsync`.
+**Change detection:** compare by **mtime**; size is consulted only after the timestamp
+has moved. Libraries rewrite Office files on upload so their stored size and hash never
+match the source again — a size test would re-send every `.docx/.xlsx/.pptx` forever.
+xsync records each uploaded file's mtime on the SharePoint side and restores the local
+mtime on download so the comparison holds across runs; a browser edit moves that
+timestamp too, so remote changes are still caught. On a **same-size,
+disagreeing-timestamp** file it falls back to comparing **QuickXorHash** on both sides.
+The gap: contents changing without the mtime moving reads as unchanged — use
+`--ignore-times`. Default is add/update only; deletion requires `--delete`. Token cache:
+`~/.config/xsync`.
 
 ## xfind — recursive path listing (find)
 

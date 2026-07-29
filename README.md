@@ -164,7 +164,13 @@ Pull a library folder down to a local directory:
 xsync "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports" ./reports
 ```
 
-Only files that are new or changed are transferred, compared by size and modification time, so a second run with nothing changed transfers nothing. To make that comparison hold across runs, xsync records each uploaded file's modification time on the SharePoint side and restores the local modification time on download. When a file is the same size but its timestamps disagree — which happens on document libraries that don't preserve the recorded time — xsync compares SharePoint's QuickXorHash against the same hash computed locally before deciding, so a file is never re-sent on a drifted timestamp alone, and never wrongly skipped when its contents actually changed.
+Only files that are new or changed are transferred, so a second run with nothing changed transfers nothing. The comparison is by modification time: xsync records each uploaded file's modification time on the SharePoint side and restores the local modification time on download, so the two sides agree across runs. File size is consulted only once the timestamp says something moved. That ordering is deliberate — SharePoint rewrites Word, Excel, and PowerPoint documents as it stores them, adding the metadata that binds them to the library's content type, so a `.docx` you upload is permanently larger on the server than the file on your disk. Comparing sizes would report every Office document as changed on every run and cut a new document version each time. When a file is the same size but its timestamps disagree — which happens on libraries that don't preserve the recorded time — xsync compares SharePoint's QuickXorHash against the same hash computed locally before deciding, so a file is never re-sent on a drifted timestamp alone.
+
+The trade-off is that a local file whose contents change without its modification time moving, as happens when you restore from a backup or copy with timestamps preserved, reads as unchanged. Pass `--ignore-times` (`-I`) to transfer everything regardless. To see why any particular file was picked, add `--itemize-changes` (`-i`), which labels each line `new`, `time`, `content`, or `forced`:
+
+```
+xsync --dry-run --itemize-changes ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
+```
 
 By default xsync only adds and updates; it never deletes. Pass `--delete` to make the destination an exact mirror, removing items that no longer exist in the source — when run in a terminal it asks for confirmation first. Pass `--dry-run` (`-n`) to print the full plan and change nothing, which is the safe way to preview a `--delete`:
 
@@ -212,7 +218,7 @@ Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in prog
 
 ## Use it from Claude Code
 
-xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which of the five tools to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's QuickXorHash change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which of the five tools to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
 
 ```sh
 mkdir -p ~/.claude/skills/xfiles

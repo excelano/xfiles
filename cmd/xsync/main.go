@@ -5,14 +5,18 @@
 // `xsync <url> ./reports` mirrors down — the way scp/rsync key off which side
 // carries host:.
 //
-// Like rsync, xsync transfers only files that are new or changed, comparing by
-// size and modification time. To keep that comparison stable it stamps each
-// uploaded file's SharePoint fileSystemInfo mtime from the local file, and sets
-// the local mtime from fileSystemInfo on download, so unchanged files aren't
-// re-sent on the next run. --delete removes destination items missing from the
-// source (mirroring proper); --dry-run/-n previews the whole plan and changes
-// nothing. Authentication is device-code; refresh tokens are cached under
-// ~/.config/xsync.
+// Like rsync, xsync transfers only files that are new or changed. The
+// comparison is by modification time: it stamps each uploaded file's SharePoint
+// fileSystemInfo mtime from the local file, and sets the local mtime from
+// fileSystemInfo on download, so unchanged files aren't re-sent. Size is
+// consulted only once the timestamp says something moved, because SharePoint
+// rewrites Office documents on upload and their stored size never matches the
+// source again (see differs in sync.go). --ignore-times forces the transfer of
+// everything when a local edit left the mtime untouched, and
+// --itemize-changes/-i prints why each file is being sent. --delete removes
+// destination items missing from the source (mirroring proper); --dry-run/-n
+// previews the whole plan and changes nothing. Authentication is device-code;
+// refresh tokens are cached under ~/.config/xsync.
 package main
 
 import (
@@ -83,10 +87,14 @@ func run() int {
 	dryRun := fs.Bool("dry-run", false, "show what would change without transferring or deleting anything")
 	fs.BoolVar(dryRun, "n", false, "show what would change without transferring or deleting anything (shorthand)")
 	doDelete := fs.Bool("delete", false, "delete destination items that no longer exist in the source (true mirror)")
+	ignoreTimes := fs.Bool("ignore-times", false, "transfer every file, skipping the modification-time comparison")
+	fs.BoolVar(ignoreTimes, "I", false, "transfer every file, skipping the modification-time comparison (shorthand)")
+	itemize := fs.Bool("itemize-changes", false, "print why each file is being transferred (new, time, content, forced)")
+	fs.BoolVar(itemize, "i", false, "print why each file is being transferred (shorthand)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: xsync [--library <name>] [--delete] [--dry-run] <src> <dst>")
+		fmt.Fprintln(os.Stderr, "Usage: xsync [--library <name>] [--delete] [--dry-run] [--itemize-changes] <src> <dst>")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Recursively mirror a directory tree between the local filesystem and a")
 		fmt.Fprintln(os.Stderr, "SharePoint folder. Exactly one of <src>/<dst> is a SharePoint URL; its")
@@ -94,8 +102,10 @@ func run() int {
 		fmt.Fprintln(os.Stderr, "  xsync ./reports https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
 		fmt.Fprintln(os.Stderr, "  xsync https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports ./reports")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Only new or changed files (by size and mtime) are transferred. Add --delete")
-		fmt.Fprintln(os.Stderr, "to remove destination items missing from the source, and --dry-run to preview.")
+		fmt.Fprintln(os.Stderr, "Only new or changed files are transferred, compared by modification time.")
+		fmt.Fprintln(os.Stderr, "Add --delete to remove destination items missing from the source, --dry-run")
+		fmt.Fprintln(os.Stderr, "to preview, and --itemize-changes to see why each file was picked. Use")
+		fmt.Fprintln(os.Stderr, "--ignore-times to force a transfer when an edit left the mtime untouched.")
 		fmt.Fprintln(os.Stderr)
 		fs.PrintDefaults()
 		fmt.Fprintln(os.Stderr)
@@ -158,5 +168,5 @@ func run() int {
 	} else {
 		url, localDir = src, dst
 	}
-	return runSync(tctx, graph, dir, localDir, url, *library, *dryRun, *doDelete)
+	return runSync(tctx, graph, dir, localDir, url, *library, *dryRun, *doDelete, *ignoreTimes, *itemize)
 }

@@ -88,22 +88,28 @@ What this means when driving the tools:
 
 ## xsync: why "unchanged" is subtle (read before mirroring)
 
-`xsync` transfers only new or changed files, compared first by **size and modification
-time**. But SharePoint is a hostile timestamp environment, and xsync compensates in two
-ways an agent won't anticipate:
+`xsync` transfers only new or changed files, compared by **modification time**. Size is
+consulted only once the timestamp has moved. That ordering surprises people, and it is
+the single most important thing to understand before mirroring:
 
-- It **records each uploaded file's mtime on the SharePoint side** and **restores the
-  local mtime on download**, so the size+time comparison can hold across runs.
+- Libraries **rewrite Office files** (`.docx/.xlsx/.pptx`) on upload, injecting the
+  metadata that binds them to the library's content type. The stored file is
+  permanently larger than your local copy and hashes differently. **Neither remote bytes
+  nor the remote hash are ground truth for Office files.** Comparing sizes would mark
+  every deliverable as changed on every run and cut a new document version each time.
+- xsync **records each uploaded file's mtime on the SharePoint side** and **restores the
+  local mtime on download**, so the timestamp comparison holds across runs. A remote
+  edit made in the browser moves that timestamp too, so genuine remote changes are still
+  caught.
 - When a file is the **same size but the timestamps disagree** — which happens on
   libraries that silently drop the recorded time — xsync computes **QuickXorHash** on
-  both sides and compares *content* before deciding. So a file is never re-sent on a
-  drifted timestamp alone, and never wrongly skipped when its bytes actually changed.
+  both sides and compares *content* before deciding.
 
-The practical consequence: **don't trust remote bytes or mtime as ground truth**, and
-don't try to out-clever xsync with your own size/time check — its hash fallback exists
-precisely because the obvious check is wrong here. Also note libraries rewrite Office
-files (`.docx/.xlsx/.pptx`) on upload, changing their bytes and hash server-side; that
-is a known interaction, not an xsync bug.
+The trade-off: a local file whose contents change without its mtime moving (restore from
+backup, `cp -p`) reads as unchanged. Pass `--ignore-times` (`-I`) to force the transfer.
+Use `--itemize-changes` (`-i`) to see why each file was picked — `new`, `time`,
+`content`, or `forced` — instead of guessing. Don't try to out-clever xsync with your own
+size/time check; the obvious check is wrong here.
 
 Two safety habits: `xsync` **never deletes by default** — pass `--delete` for a true
 mirror, and always preview it first with `--dry-run` (`-n`), which prints the full plan
