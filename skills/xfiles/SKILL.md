@@ -24,10 +24,10 @@ mirroring a Unix verb your fingers already know, all sharing one device-code log
 The authoritative sources for behavior are the binaries themselves (`xftp --help`,
 `xcp --help`, and so on) and the
 [README](https://github.com/excelano/xfiles/blob/main/README.md); if anything here
-conflicts with them, they win. These recipes assume **xfiles 1.6.x or newer** — the
-xsync change detection described below, and its `--ignore-times`/`--itemize-changes`
-flags, do not exist in 1.5.x, where Office files re-uploaded on every run. Check
-any tool with `--version`; upgrade with `sudo apt install --only-upgrade xfiles`
+conflicts with them, they win. These recipes assume an xsync whose `--help` lists
+`--itemize-changes` and `--ignore-times`; an older build compares by size as well as
+time and re-uploads every Office file on every run, so check that first if a sync
+keeps re-sending unchanged deliverables. Upgrade with `sudo apt install --only-upgrade xfiles`
 (Debian/Ubuntu), `brew upgrade xftp xcp xsync xfind xtree` (macOS), or by re-running
 the install one-liner from the README.
 
