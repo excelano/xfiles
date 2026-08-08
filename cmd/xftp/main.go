@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/excelano/xfiles/internal/buildinfo"
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/spauth"
 )
@@ -57,7 +58,7 @@ func run() int {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println(version)
+		fmt.Println(buildinfo.Resolve(version))
 		return 0
 	}
 	args := fs.Args()
