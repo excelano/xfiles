@@ -14,6 +14,8 @@ Each is a single static Go binary with no daemon and no mounted filesystem. Auth
 
 ## Install
 
+Every install line below ends with `xcp --install-skill`. That installs the [Claude Code skill](#use-it-from-claude-code) alongside the binary, which is the one step people reliably skipped when it lived further down the page. Drop it if you do not use Claude Code — the CLI itself does not need it.
+
 ### Debian and Ubuntu
 
 Add the [Excelano apt repository](https://excelano.com/apt/) once (one-time setup):
@@ -25,7 +27,7 @@ curl -fsSL https://excelano.com/apt/setup.sh | sudo sh
 Then install the whole suite as a single metapackage, so `apt upgrade` keeps everything current:
 
 ```sh
-sudo apt install xfiles
+sudo apt install xfiles && xcp --install-skill
 ```
 
 `xfiles` is a metapackage that pulls in the whole suite. To install just one, name it instead — `sudo apt install xsync`, for example.
@@ -42,7 +44,7 @@ brew trust excelano/tap
 There's no metapackage, so name the tools you want. `brew upgrade` keeps them current:
 
 ```sh
-brew install xftp xcp xsync xfind xtree
+brew install xftp xcp xsync xfind xtree && xcp --install-skill
 ```
 
 ### Prebuilt binary (Linux and macOS, x86_64 and arm64)
@@ -71,6 +73,9 @@ go install github.com/excelano/xfiles/cmd/xcp@latest
 go install github.com/excelano/xfiles/cmd/xsync@latest
 go install github.com/excelano/xfiles/cmd/xfind@latest
 go install github.com/excelano/xfiles/cmd/xtree@latest
+
+# any one of them installs the shared Claude Code skill
+xcp --install-skill
 ```
 
 ## Pointing at a library
@@ -218,17 +223,15 @@ Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in prog
 
 ## Use it from Claude Code
 
-xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which tool to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Drop it into your personal skills directory:
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which tool to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. The binary installs it:
 
 ```sh
-mkdir -p ~/.claude/skills/xfiles
-for f in SKILL.md reference.md; do
-  curl -fsSL "https://raw.githubusercontent.com/excelano/xfiles/main/skills/xfiles/$f" \
-    -o ~/.claude/skills/xfiles/$f
-done
+xfiles --install-skill
 ```
 
-Or, from a clone of this repo, `cp -r skills/xfiles ~/.claude/skills/`.
+That writes `~/.claude/skills/xfiles/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `xfiles --uninstall-skill` removes it. Restart Claude Code afterwards, since skills are discovered at session start.
+
+The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, cargo, the curl one-liner, or a build from source.
 
 ## Building
 
