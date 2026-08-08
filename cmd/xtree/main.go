@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/excelano/xfiles"
 	"github.com/excelano/xfiles/internal/buildinfo"
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/spauth"
@@ -87,6 +88,8 @@ func run() int {
 	dirsOnly := fs.Bool("d", false, "List folders only")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
+	installSkill := fs.Bool("install-skill", false, "install the xfiles Claude Code skill and exit")
+	uninstallSkill := fs.Bool("uninstall-skill", false, "remove the installed Claude Code skill and exit")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: xtree [flags] <url>")
 		fmt.Fprintln(os.Stderr)
@@ -111,6 +114,12 @@ func run() int {
 	if *showVersion {
 		fmt.Println(buildinfo.Resolve(version))
 		return 0
+	}
+	if *installSkill {
+		return xfiles.InstallSkill(buildinfo.Resolve(version))
+	}
+	if *uninstallSkill {
+		return xfiles.UninstallSkill()
 	}
 	if *level < 0 {
 		fmt.Fprintln(os.Stderr, "Error: -L cannot be negative")
