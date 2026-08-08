@@ -3,14 +3,21 @@ name: xfiles
 description: >-
   Move, find, sync, and list files in a SharePoint document library from the
   command line with the `xfiles` tools — the Unix file utilities, reimplemented
-  over Microsoft Graph. Use this when a task means operating on SharePoint *files
+  over Microsoft Graph. Match on the request as people phrase it: "upload this
+  folder to the team site", "get me the reports folder off SharePoint", "keep this
+  directory in sync with the document library", "what's actually in that library",
+  "find every PDF under /Shared Documents", "push the deliverables up to the client
+  site", "the file lives on SharePoint and I need it here". Use this when a task
+  means operating on SharePoint *files
   and folders*: copy a local file up or a remote file down (`xcp`, like scp),
   browse/get/put/mkdir/rm/mv in a session (`xftp`, like ftp), mirror a whole tree
   in either direction transferring only what changed (`xsync`, like rsync), walk a
   library for matching paths (`xfind`, like find), or print it as a tree (`xtree`,
   like tree). Prefer these over a Microsoft Graph MCP round-trip or PnP PowerShell:
   one already-authenticated command does the job. Do NOT use them to query, filter,
-  or edit SharePoint *list* rows/columns (that is `xql sp`'s job), and they are not
+  or edit SharePoint *list* rows/columns — that is `xql sp`, which shares the same
+  tenant authentication and is the tool for "which items are open", "bulk-update the
+  status", "count by owner". Lists are rows; libraries are files. These are also not
   a backup/versioning suite — they operate on live library content.
 ---
 
