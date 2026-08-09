@@ -16,13 +16,15 @@ The release loop for a new version. Run it from a clean `main` with the working 
 
    If the tag was created by another workflow's `GITHUB_TOKEN` the push trigger will not fire, since GitHub suppresses downstream events for token-created refs. Dispatch by hand in that case: `gh workflow run release.yml -f tag=v1.2.3`.
 
-3. **Add the .debs to the Excelano apt repo.** Pull every Debian package the release produced rather than picking them off by name:
+3. **Ship to apt.** This is the channel you install from, so a release that has not reached it is not shipped, whatever the release page says.
    ```sh
-   gh release download v1.2.3 --repo excelano/xfiles --pattern '*.deb' --dir /tmp/xfiles-debs
+   apt-ship xfiles v1.2.3
    ```
-   Then in `~/excelano-apt/`: `add-deb.sh` each file → `rebuild.sh` (GPG-signs) → `updatesite excelano.com.apt -y`. **Dry-run the rsync first** (`rsync … --delete -n`) and confirm zero deletions before the real push — the apt pool is a superset of live, and a stray `--delete` wipe is the standing hazard. See `feedback_rsync_parent_wipes_subpath`.
+   One command covers every command in the repo: it takes whatever `.deb` files the release produced rather than naming them, so a sixth command needs no change here. It adds each to the pool, re-signs the indices, previews the rsync, **refuses to deploy if the preview would delete anything**, pushes, and verifies each package against the live index on both architectures. The tag is optional; with none it takes the latest release. See `feedback_rsync_parent_wipes_subpath` for why the deletion guard exists.
 
-   `updatesite` does not touch git, so commit the apt repo right afterwards or it drifts behind what is actually being served.
+   **This is the step releases lose.** Nothing downstream depends on apt — winget reads the GitHub release directly and ships fine over a release whose apt step never happened — so the failure is silent and everything else looks finished. `fleet -r` is what catches it: an `APT` column reading `behind`, and the `apt-ship` line to fix it.
+
+   `updatesite` is an rsync and does not touch git, but a routine package add leaves nothing to commit either — `dists/` and `pool/` are gitignored build artifacts, which is also why `git status` in the apt repo cannot tell you the step was skipped. Commit the apt repo only when you changed something tracked: a script, `conf/release.conf`, a metapackage `control` file, or the README's curated install hint.
 
    The **`xfiles` metapackage** in `~/excelano-apt/metapackages/` is a control file that depends on the commands by name with no version constraint, so a release does not touch it. It needs a rebuild (`build.sh xfiles`, then `add-deb.sh` the result) only when the set of commands changes, and that rebuild is where its own `Version:` gets bumped by hand.
 
