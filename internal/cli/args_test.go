@@ -125,6 +125,7 @@ func TestHelpRequested(t *testing.T) {
 		{"a value that looks like help is not a request", []string{"--library", "--help"}, false},
 		{"an attached value that looks like help is not a request", []string{"--library=--help"}, false},
 		{"help after a terminator is an operand", []string{"--", "--help"}, false},
+		{"an attached value on help is still a request", []string{"--help=true"}, true},
 		{"a bare dash is not a request", []string{"-"}, false},
 	}
 

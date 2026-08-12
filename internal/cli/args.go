@@ -86,12 +86,18 @@ func HelpRequested(args []string, fs *flag.FlagSet) bool {
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			continue
 		}
+		// Split an attached value off before comparing, so `--help=true` is
+		// read as the request it is while `--library=--help` stays a value.
 		name := strings.TrimLeft(a, "-")
+		attached := false
+		if eq := strings.IndexByte(name, '='); eq >= 0 {
+			name, attached = name[:eq], true
+		}
 		if name == "h" || name == "help" {
 			return true
 		}
-		if strings.ContainsRune(name, '=') {
-			continue
+		if attached {
+			continue // the value travelled with the flag
 		}
 		if !isBool[name] && i+1 < len(args) {
 			i++ // skip the flag's value so it is never mistaken for a flag
