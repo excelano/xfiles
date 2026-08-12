@@ -77,6 +77,24 @@ Two rules an agent gets wrong:
 Force a specific library regardless of the URL with `--library "Display Name"`, which
 every tool accepts.
 
+## Invocation and exit codes
+
+Flags may appear anywhere on the line, before or after the URL — `xtree <url> -L 2`
+reads the same as `xtree -L 2 <url>`. A local file whose name begins with a dash goes
+after a `--` terminator. `--help` and `--version` print to stdout and exit 0.
+
+Every tool exits on the same three-way contract, so a caller can branch on the number
+rather than read the prose:
+
+| Code | Means | Examples |
+|---|---|---|
+| 0 | Success | The transfer completed; the walk finished, even if it matched nothing |
+| 1 | Bad input | Unreachable site, missing file, sign-in that could not be completed, transfer that failed partway |
+| 2 | Bad invocation | Unknown flag, missing or extra argument, contradictory options |
+
+A search that matches nothing is exit 0 with no output — the empty result is the
+answer, not a failure.
+
 ## Auth and consent (shared across the family)
 
 Every tool in the suite — plus the sibling [xql](https://github.com/excelano/xql) — shares one
@@ -90,6 +108,11 @@ What this means when driving the tools:
 - **First contact with a *new tenant* raises a one-time consent prompt** that a human
   must clear interactively — you can't complete a fresh device-code login unattended.
   Once any user (or an admin, per tenant policy) has consented, later runs are silent.
+- **Unattended, a tool that needs to sign in refuses instead of waiting.** With no
+  terminal attached, device-code sign-in would print a code to nobody and poll for
+  about fifteen minutes, so the tool exits 1 immediately and says to run the same
+  command once from an interactive terminal. Ask the user to do exactly that; there is
+  no flag that gets past it, because the flow needs a browser and a human.
 - A tool run against an already-authenticated tenant just works; expect an
   `Authenticated as: <upn>` line on stderr.
 - Each tool keeps its **own** token cache (`~/.config/xftp`, `~/.config/xcp`, …), so a

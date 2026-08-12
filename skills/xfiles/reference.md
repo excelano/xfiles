@@ -124,6 +124,18 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
 
 Token cache: `~/.config/xtree`.
 
+## Invocation
+
+- **Flag position is free.** Flags are read wherever they appear, so `xfind <url> --name
+  '*.xlsx'` and `xfind --name '*.xlsx' <url>` are the same command. Operand order still
+  carries meaning for `xcp` and `xsync`, where the URL side sets the direction.
+- **`--` ends flag parsing**, which is how a local path beginning with a dash is passed.
+- **`--help`, `-h`, `--version`, `-V`** print to stdout and exit 0. The version line
+  names its tool (`xtree 0.4.0`) so a log mixing all five stays readable.
+- **Exit codes:** `0` success, `1` bad input (unreachable site, missing file, incomplete
+  sign-in, failed transfer), `2` bad invocation (unknown flag, wrong argument count,
+  contradictory options). A walk that matches nothing is 0, not 1.
+
 ## Auth, consent, and tenants
 
 - **Flow:** device-code OAuth against a multi-tenant Entra app registration ("Excelano
@@ -136,6 +148,11 @@ Token cache: `~/.config/xtree`.
   interactively — either the user or an admin, per that tenant's policy — after which
   everyone in the tenant is covered and runs go silent. You cannot complete a fresh
   device-code login unattended.
+- **Unattended behavior:** when a sign-in is needed and stderr is not a terminal, the
+  tool exits 1 before requesting a device code, with `no cached token, and no terminal
+  is attached to complete device-code sign-in`. Only the device-code path is gated — a
+  cached refresh token still renews silently under cron or an agent, which is why the
+  remedy is to run the command once interactively and then re-run it unattended.
 - **Per-tool caches:** each binary caches its refresh token under `~/.config/<tool>`
   (`XDG_CONFIG_HOME` respected), so a login with one tool doesn't silence another's
   first run.

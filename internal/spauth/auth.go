@@ -26,6 +26,7 @@ import (
 
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/cache"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
+	"golang.org/x/term"
 )
 
 // Azure app registration "Excelano SharePoint tools"
@@ -105,7 +106,9 @@ func NewPublicClient(tokenCachePath string) (public.Client, error) {
 // Authenticate returns a usable AuthResult, attempting silent refresh against
 // any cached account first and falling back to interactive device code flow.
 // Device code instructions are printed to stderr so they don't pollute
-// stdout-bound results.
+// stdout-bound results. When that fallback would be needed and no terminal is
+// attached to answer it, Authenticate fails immediately rather than printing a
+// code nobody will read and polling until it expires.
 func Authenticate(ctx context.Context, client public.Client) (public.AuthResult, error) {
 	accounts, err := client.Accounts(ctx)
 	if err == nil && len(accounts) > 0 {
@@ -115,6 +118,12 @@ func Authenticate(ctx context.Context, client public.Client) (public.AuthResult,
 		}
 		// Silent failed (refresh token expired, scopes changed, account
 		// invalidated). Fall through to device code.
+	}
+
+	if !interactive() {
+		return public.AuthResult{}, errors.New(
+			"no cached token, and no terminal is attached to complete device-code sign-in; " +
+				"run this same command once from an interactive terminal to cache a token, then re-run it here")
 	}
 
 	dc, err := client.AcquireTokenByDeviceCode(ctx, defaultScopes)
@@ -129,6 +138,19 @@ func Authenticate(ctx context.Context, client public.Client) (public.AuthResult,
 		return public.AuthResult{}, fmt.Errorf("device code authentication: %w", err)
 	}
 	return result, nil
+}
+
+// interactive reports whether a human is positioned to complete device-code
+// sign-in. The flow prints a code and a URL and then polls for roughly fifteen
+// minutes; with no terminal on stderr, that message is addressed to nobody and
+// the poll is a hang with an unread instruction in front of it. Refusing up
+// front turns fifteen silent minutes into one line a caller can act on.
+//
+// Only the device-code path is gated. A cached refresh token still works
+// unattended, which is what makes the remedy — sign in once interactively —
+// worth stating.
+func interactive() bool {
+	return term.IsTerminal(int(os.Stderr.Fd()))
 }
 
 // aadstsHints maps the most common AADSTS error codes to one-line actionable

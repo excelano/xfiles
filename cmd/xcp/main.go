@@ -10,6 +10,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/excelano/xfiles"
 	"github.com/excelano/xfiles/internal/buildinfo"
+	"github.com/excelano/xfiles/internal/cli"
 	"github.com/excelano/xfiles/internal/spauth"
 )
 
@@ -105,32 +107,38 @@ func run() int {
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
 	installSkill := fs.Bool("install-skill", false, "install the xfiles Claude Code skill and exit")
 	uninstallSkill := fs.Bool("uninstall-skill", false, "remove the installed Claude Code skill and exit")
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: xcp [--library <name>] <src> <dst>")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Copy a file between the local filesystem and SharePoint. Exactly one of")
-		fmt.Fprintln(os.Stderr, "<src>/<dst> is a SharePoint URL; its position sets the direction:")
-		fmt.Fprintln(os.Stderr, "  xcp report.xlsx https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
-		fmt.Fprintln(os.Stderr, "  xcp https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports/Q1.xlsx ./")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Use - as the local side to stream: a - destination cats the file to stdout,")
-		fmt.Fprintln(os.Stderr, "a - source uploads from stdin (the URL must then name the target file).")
-		fmt.Fprintln(os.Stderr, "  xcp https://contoso.sharepoint.com/.../Q1.xlsx -   | xsv stats")
-		fmt.Fprintln(os.Stderr, "  generate-report | xcp - https://contoso.sharepoint.com/.../report.csv")
-		fmt.Fprintln(os.Stderr)
+	usage := func(w io.Writer) {
+		fs.SetOutput(w)
+		fmt.Fprintln(w, "Usage: xcp [--library <name>] <src> <dst>")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Copy a file between the local filesystem and SharePoint. Exactly one of")
+		fmt.Fprintln(w, "<src>/<dst> is a SharePoint URL; its position sets the direction:")
+		fmt.Fprintln(w, "  xcp report.xlsx https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
+		fmt.Fprintln(w, "  xcp https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports/Q1.xlsx ./")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Use - as the local side to stream: a - destination cats the file to stdout,")
+		fmt.Fprintln(w, "a - source uploads from stdin (the URL must then name the target file).")
+		fmt.Fprintln(w, "  xcp https://contoso.sharepoint.com/.../Q1.xlsx -   | xsv stats")
+		fmt.Fprintln(w, "  generate-report | xcp - https://contoso.sharepoint.com/.../report.csv")
+		fmt.Fprintln(w)
 		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Authentication is device-code via Microsoft Graph; refresh tokens are")
-		fmt.Fprintln(os.Stderr, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Authentication is device-code via Microsoft Graph; refresh tokens are")
+		fmt.Fprintln(w, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, cli.ExitCodes)
 	}
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			return 0
-		}
+	fs.Usage = func() { usage(os.Stderr) }
+	args := os.Args[1:]
+	if cli.HelpRequested(args, fs) {
+		usage(os.Stdout)
+		return 0
+	}
+	if err := fs.Parse(cli.Reorder(args, fs)); err != nil {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println(buildinfo.Resolve(version))
+		fmt.Println("xcp " + buildinfo.Resolve(version))
 		return 0
 	}
 	if *installSkill {
@@ -139,7 +147,7 @@ func run() int {
 	if *uninstallSkill {
 		return xfiles.UninstallSkill()
 	}
-	args := fs.Args()
+	args = fs.Args()
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "Error: exactly two arguments are required (a source and a destination)")
 		// One URL-shaped argument is the fingerprint of an unquoted "Copy link":

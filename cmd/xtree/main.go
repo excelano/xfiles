@@ -11,6 +11,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/excelano/xfiles"
 	"github.com/excelano/xfiles/internal/buildinfo"
+	"github.com/excelano/xfiles/internal/cli"
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/spauth"
 )
@@ -90,29 +92,35 @@ func run() int {
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
 	installSkill := fs.Bool("install-skill", false, "install the xfiles Claude Code skill and exit")
 	uninstallSkill := fs.Bool("uninstall-skill", false, "remove the installed Claude Code skill and exit")
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: xtree [flags] <url>")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Print a SharePoint library as an indented tree:")
-		fmt.Fprintln(os.Stderr, "  xtree https://contoso.sharepoint.com/sites/Marketing")
-		fmt.Fprintln(os.Stderr, "  xtree -L 2 -d https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Wrap a SharePoint \"Copy link\" URL in single quotes; its ? and & characters")
-		fmt.Fprintln(os.Stderr, "would otherwise be acted on by the shell before xtree sees them.")
-		fmt.Fprintln(os.Stderr)
+	usage := func(w io.Writer) {
+		fs.SetOutput(w)
+		fmt.Fprintln(w, "Usage: xtree [flags] <url>")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Print a SharePoint library as an indented tree:")
+		fmt.Fprintln(w, "  xtree https://contoso.sharepoint.com/sites/Marketing")
+		fmt.Fprintln(w, "  xtree -L 2 -d https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Wrap a SharePoint \"Copy link\" URL in single quotes; its ? and & characters")
+		fmt.Fprintln(w, "would otherwise be acted on by the shell before xtree sees them.")
+		fmt.Fprintln(w)
 		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Authentication is device-code via Microsoft Graph; refresh tokens are")
-		fmt.Fprintln(os.Stderr, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Authentication is device-code via Microsoft Graph; refresh tokens are")
+		fmt.Fprintln(w, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, cli.ExitCodes)
 	}
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			return 0
-		}
+	fs.Usage = func() { usage(os.Stderr) }
+	args := os.Args[1:]
+	if cli.HelpRequested(args, fs) {
+		usage(os.Stdout)
+		return 0
+	}
+	if err := fs.Parse(cli.Reorder(args, fs)); err != nil {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println(buildinfo.Resolve(version))
+		fmt.Println("xtree " + buildinfo.Resolve(version))
 		return 0
 	}
 	if *installSkill {
@@ -126,7 +134,7 @@ func run() int {
 		return 2
 	}
 
-	args := fs.Args()
+	args = fs.Args()
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "Error: exactly one SharePoint URL is required")
 		fs.Usage()

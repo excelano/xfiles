@@ -23,6 +23,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/excelano/xfiles"
 	"github.com/excelano/xfiles/internal/buildinfo"
+	"github.com/excelano/xfiles/internal/cli"
 	"github.com/excelano/xfiles/internal/spauth"
 )
 
@@ -97,33 +99,39 @@ func run() int {
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
 	installSkill := fs.Bool("install-skill", false, "install the xfiles Claude Code skill and exit")
 	uninstallSkill := fs.Bool("uninstall-skill", false, "remove the installed Claude Code skill and exit")
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: xsync [--library <name>] [--delete] [--dry-run] [--itemize-changes] <src> <dst>")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Recursively mirror a directory tree between the local filesystem and a")
-		fmt.Fprintln(os.Stderr, "SharePoint folder. Exactly one of <src>/<dst> is a SharePoint URL; its")
-		fmt.Fprintln(os.Stderr, "position sets the direction:")
-		fmt.Fprintln(os.Stderr, "  xsync ./reports https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
-		fmt.Fprintln(os.Stderr, "  xsync https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports ./reports")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Only new or changed files are transferred, compared by modification time.")
-		fmt.Fprintln(os.Stderr, "Add --delete to remove destination items missing from the source, --dry-run")
-		fmt.Fprintln(os.Stderr, "to preview, and --itemize-changes to see why each file was picked. Use")
-		fmt.Fprintln(os.Stderr, "--ignore-times to force a transfer when an edit left the mtime untouched.")
-		fmt.Fprintln(os.Stderr)
+	usage := func(w io.Writer) {
+		fs.SetOutput(w)
+		fmt.Fprintln(w, "Usage: xsync [--library <name>] [--delete] [--dry-run] [--itemize-changes] <src> <dst>")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Recursively mirror a directory tree between the local filesystem and a")
+		fmt.Fprintln(w, "SharePoint folder. Exactly one of <src>/<dst> is a SharePoint URL; its")
+		fmt.Fprintln(w, "position sets the direction:")
+		fmt.Fprintln(w, "  xsync ./reports https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
+		fmt.Fprintln(w, "  xsync https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports ./reports")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Only new or changed files are transferred, compared by modification time.")
+		fmt.Fprintln(w, "Add --delete to remove destination items missing from the source, --dry-run")
+		fmt.Fprintln(w, "to preview, and --itemize-changes to see why each file was picked. Use")
+		fmt.Fprintln(w, "--ignore-times to force a transfer when an edit left the mtime untouched.")
+		fmt.Fprintln(w)
 		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Authentication is device-code via Microsoft Graph; refresh tokens are")
-		fmt.Fprintln(os.Stderr, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Authentication is device-code via Microsoft Graph; refresh tokens are")
+		fmt.Fprintln(w, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, cli.ExitCodes)
 	}
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			return 0
-		}
+	fs.Usage = func() { usage(os.Stderr) }
+	args := os.Args[1:]
+	if cli.HelpRequested(args, fs) {
+		usage(os.Stdout)
+		return 0
+	}
+	if err := fs.Parse(cli.Reorder(args, fs)); err != nil {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println(buildinfo.Resolve(version))
+		fmt.Println("xsync " + buildinfo.Resolve(version))
 		return 0
 	}
 	if *installSkill {
@@ -132,7 +140,7 @@ func run() int {
 	if *uninstallSkill {
 		return xfiles.UninstallSkill()
 	}
-	args := fs.Args()
+	args = fs.Args()
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "Error: exactly two arguments are required (a source and a destination)")
 		// A lone URL-shaped argument is the fingerprint of an unquoted "Copy link":
