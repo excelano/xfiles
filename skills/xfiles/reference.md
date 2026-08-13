@@ -87,6 +87,13 @@ The gap: contents changing without the mtime moving reads as unchanged — use
 `--ignore-times`. Default is add/update only; deletion requires `--delete`. Token cache:
 `~/.config/xsync`.
 
+**Case, when uploading.** SharePoint preserves case but does not distinguish by it, so
+`D1` and `d1` are one folder there. Uploads compare with case folded: a local `d1/`
+matching an existing `D1/` is the same folder, and `--delete` will not remove a
+destination item a source path matches under another spelling. Two local paths differing
+only by case are a reported conflict, since the library can hold only one. Downloads stay
+case-sensitive, matching the local filesystem.
+
 ## xfind — recursive path listing (find)
 
 ```

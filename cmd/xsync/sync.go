@@ -150,7 +150,10 @@ func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir
 		return 1
 	}
 
-	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, doDelete, ignoreTimes)
+	// SharePoint and OneDrive are case-preserving but case-insensitive, so an
+	// upload's destination keys must be matched with case folded. A download's
+	// destination is the local filesystem, which on Linux is case-sensitive.
+	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, doDelete, ignoreTimes, dir == upload)
 
 	// Settle the size-equal/mtime-diverged candidates by content hash. The remote
 	// side carries SharePoint's QuickXorHash either way; matches are already in
@@ -291,10 +294,7 @@ func ensureRemoteDir(ctx context.Context, g *spauth.GraphClient, d *drive.Drive,
 	cur := ""
 	for _, s := range segs {
 		cur = path.Join(cur, s)
-		if _, err := d.Stat(ctx, g, cur); err == nil {
-			continue
-		}
-		if err := d.Mkdir(ctx, g, cur); err != nil {
+		if err := d.MkdirIfMissing(ctx, g, cur); err != nil {
 			return err
 		}
 	}
@@ -364,9 +364,27 @@ func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root
 // entirely and schedules every existing file, the escape hatch for a local edit
 // that left the mtime untouched. Directory creations sort parents-first;
 // deletions keep only the top-most missing path of each removed subtree.
-func plan(source, dest map[string]fileEntry, doDelete, ignoreTimes bool) (mkdirs, copies, verify, deletes []op, conflicts []string, upToDate int) {
+func plan(source, dest map[string]fileEntry, doDelete, ignoreTimes, foldDest bool) (mkdirs, copies, verify, deletes []op, conflicts []string, upToDate int) {
+	// Index both sides by folded key when the destination cannot tell two
+	// spellings apart. Without this a library holding D1 and a source offering
+	// d1 read as one missing folder and one extra one — which schedules a mkdir
+	// for a folder that is already there and, under --delete, a recursive delete
+	// of the folder the copies were just written into, because execute runs
+	// deletes last. The mkdir noise was the visible half; that was the other.
+	destFold := foldIndex(dest, foldDest)
+	sourceFold := foldIndex(source, foldDest)
+
+	// Two source paths differing only in case are two entries here and one item
+	// on the destination, so one silently overwrites the other. Say so instead.
+	if foldDest {
+		for _, rels := range collisions(source) {
+			conflicts = append(conflicts, strings.Join(rels, " and ")+
+				" (differ only by case; the destination cannot hold both)")
+		}
+	}
+
 	for rel, s := range source {
-		dst, exists := dest[rel]
+		dst, exists := lookupFolded(dest, destFold, rel)
 		if s.isDir {
 			if exists {
 				if !dst.isDir {
@@ -402,7 +420,7 @@ func plan(source, dest map[string]fileEntry, doDelete, ignoreTimes bool) (mkdirs
 	if doDelete {
 		delSet := map[string]bool{}
 		for rel := range dest {
-			if _, ok := source[rel]; !ok {
+			if _, ok := lookupFolded(source, sourceFold, rel); !ok {
 				delSet[rel] = true
 			}
 		}
@@ -423,6 +441,55 @@ func plan(source, dest map[string]fileEntry, doDelete, ignoreTimes bool) (mkdirs
 	sort.Slice(copies, func(i, j int) bool { return copies[i].rel < copies[j].rel })
 	sort.Slice(deletes, func(i, j int) bool { return deletes[i].rel < deletes[j].rel })
 	return mkdirs, copies, verify, deletes, conflicts, upToDate
+}
+
+// foldIndex maps each entry's lower-cased path to its actual one, or returns nil
+// when the destination is case-sensitive and no folding should happen. A path
+// that collides with another under folding is not represented here — collisions
+// are reported as conflicts rather than resolved by picking a winner.
+func foldIndex(m map[string]fileEntry, fold bool) map[string]string {
+	if !fold {
+		return nil
+	}
+	idx := make(map[string]string, len(m))
+	for rel := range m {
+		idx[strings.ToLower(rel)] = rel
+	}
+	return idx
+}
+
+// lookupFolded finds rel in m, trying the exact spelling first so a tree whose
+// cases already agree behaves exactly as it did before folding existed.
+func lookupFolded(m map[string]fileEntry, idx map[string]string, rel string) (fileEntry, bool) {
+	if e, ok := m[rel]; ok {
+		return e, true
+	}
+	if idx == nil {
+		return fileEntry{}, false
+	}
+	if actual, ok := idx[strings.ToLower(rel)]; ok {
+		return m[actual], true
+	}
+	return fileEntry{}, false
+}
+
+// collisions groups the paths that differ only by case, sorted so the report
+// reads the same on every run (Go map iteration order is not stable).
+func collisions(m map[string]fileEntry) [][]string {
+	byFold := map[string][]string{}
+	for rel := range m {
+		k := strings.ToLower(rel)
+		byFold[k] = append(byFold[k], rel)
+	}
+	var out [][]string
+	for _, rels := range byFold {
+		if len(rels) > 1 {
+			sort.Strings(rels)
+			out = append(out, rels)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] })
+	return out
 }
 
 // printPlan lists every planned change, one per line, with a direction-aware
@@ -499,7 +566,9 @@ func execute(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir dir
 
 func applyMkdir(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
 	if dir == upload {
-		return d.Mkdir(ctx, g, path.Join(remoteRoot, o.rel))
+		// The folder existing is the end state a mirror wants, so an already-there
+		// folder is not an error the way it is for an interactive xftp mkdir.
+		return d.MkdirIfMissing(ctx, g, path.Join(remoteRoot, o.rel))
 	}
 	return os.MkdirAll(filepath.Join(localRoot, filepath.FromSlash(o.rel)), 0o755)
 }

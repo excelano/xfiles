@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -163,7 +164,7 @@ func TestPlan(t *testing.T) {
 	base := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 	source, dest := planFixture(base)
 
-	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, true, false)
+	mkdirs, copies, verify, deletes, conflicts, upToDate := plan(source, dest, true, false, false)
 
 	if got := relsOf(mkdirs); !eqStrings(got, []string{"sub", "sub/deep"}) {
 		t.Errorf("mkdirs = %v, want [sub sub/deep]", got)
@@ -197,7 +198,7 @@ func TestPlan(t *testing.T) {
 	}
 
 	// Without --delete, nothing is removed.
-	_, _, _, dels, _, _ := plan(source, dest, false, false)
+	_, _, _, dels, _, _ := plan(source, dest, false, false, false)
 	if len(dels) != 0 {
 		t.Errorf("deletes without --delete = %v, want none", relsOf(dels))
 	}
@@ -207,7 +208,7 @@ func TestPlanIgnoreTimes(t *testing.T) {
 	base := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 	source, dest := planFixture(base)
 
-	_, copies, verify, _, _, upToDate := plan(source, dest, false, true)
+	_, copies, verify, _, _, upToDate := plan(source, dest, false, true, false)
 
 	// Every source file is scheduled, including the ones the timestamp
 	// comparison would have skipped; nothing is deferred to a hash check.
@@ -238,12 +239,98 @@ func TestPlanMkdirOrdering(t *testing.T) {
 		"a":     {rel: "a", isDir: true},
 		"a/b":   {rel: "a/b", isDir: true},
 	}
-	mkdirs, _, _, _, _, _ := plan(source, map[string]fileEntry{}, false, false)
+	mkdirs, _, _, _, _, _ := plan(source, map[string]fileEntry{}, false, false, false)
 	got := relsOf(mkdirs)
 	if !sort.SliceIsSorted(got, func(i, j int) bool { return depth(got[i]) < depth(got[j]) }) {
 		t.Errorf("mkdirs not parent-first: %v", got)
 	}
 	if !eqStrings(got, []string{"a", "a/b", "a/b/c"}) {
 		t.Errorf("mkdirs = %v, want [a a/b a/b/c]", got)
+	}
+}
+
+// --- case-insensitive destinations (#7) ----------------------------------
+
+func dirEntry(rel string) fileEntry { return fileEntry{rel: rel, isDir: true} }
+func fileEnt(rel string, n int64) fileEntry {
+	return fileEntry{rel: rel, size: n, mtime: time.Unix(1000, 0)}
+}
+
+// A library already holding D1 and a source offering d1 is one folder, not a
+// missing one plus a stray one. Without folding this planned a mkdir for a
+// folder that was already there — the reported symptom.
+func TestPlanFoldsCaseForRemoteDestination(t *testing.T) {
+	source := map[string]fileEntry{"d1": dirEntry("d1")}
+	dest := map[string]fileEntry{"D1": dirEntry("D1")}
+
+	mkdirs, _, _, _, _, _ := plan(source, dest, false, false, true)
+	if len(mkdirs) != 0 {
+		t.Errorf("folded destination should need no mkdir, got %v", mkdirs)
+	}
+
+	// A local destination is case-sensitive, so the same inputs are two folders.
+	mkdirs, _, _, _, _, _ = plan(source, dest, false, false, false)
+	if len(mkdirs) != 1 {
+		t.Errorf("case-sensitive destination should mkdir d1, got %v", mkdirs)
+	}
+}
+
+// The dangerous half. execute runs deletes last, so without folding a --delete
+// run would create d1, upload into it, and then recursively delete D1 — the same
+// remote folder, with the files just written to it.
+func TestPlanDoesNotDeleteACaseVariantOfASourcePath(t *testing.T) {
+	source := map[string]fileEntry{
+		"d1":        dirEntry("d1"),
+		"d1/report": fileEnt("d1/report", 10),
+	}
+	dest := map[string]fileEntry{
+		"D1":        dirEntry("D1"),
+		"D1/report": fileEnt("D1/report", 10),
+	}
+
+	_, _, _, deletes, _, _ := plan(source, dest, true, false, true)
+	if len(deletes) != 0 {
+		t.Fatalf("a case variant of a source path must not be deleted, got %v", deletes)
+	}
+
+	// And a genuinely absent path is still deleted, so folding has not disarmed
+	// --delete generally.
+	dest["gone"] = fileEnt("gone", 1)
+	_, _, _, deletes, _, _ = plan(source, dest, true, false, true)
+	if len(deletes) != 1 || deletes[0].rel != "gone" {
+		t.Errorf("expected only 'gone' deleted, got %v", deletes)
+	}
+}
+
+// An existing file matched only by folded case is compared, not re-sent as new.
+func TestPlanComparesFoldedFilesInsteadOfResending(t *testing.T) {
+	source := map[string]fileEntry{"D1/Report.md": fileEnt("D1/Report.md", 10)}
+	dest := map[string]fileEntry{"d1/report.md": fileEnt("d1/report.md", 10)}
+
+	_, copies, _, _, _, upToDate := plan(source, dest, false, false, true)
+	if len(copies) != 0 || upToDate != 1 {
+		t.Errorf("folded match should be up to date, got copies=%v upToDate=%d", copies, upToDate)
+	}
+}
+
+// Two source paths differing only by case are one item on the destination, so
+// one would silently overwrite the other. That is reported rather than merged.
+func TestPlanReportsSourcePathsThatDifferOnlyByCase(t *testing.T) {
+	source := map[string]fileEntry{
+		"notes.md": fileEnt("notes.md", 1),
+		"Notes.md": fileEnt("Notes.md", 2),
+	}
+	_, _, _, _, conflicts, _ := plan(source, map[string]fileEntry{}, false, false, true)
+	if len(conflicts) != 1 {
+		t.Fatalf("expected one case conflict, got %v", conflicts)
+	}
+	if !strings.Contains(conflicts[0], "Notes.md and notes.md") {
+		t.Errorf("conflict should name both paths in a stable order, got %q", conflicts[0])
+	}
+
+	// The same two paths are two distinct files for a case-sensitive destination.
+	_, _, _, _, conflicts, _ = plan(source, map[string]fileEntry{}, false, false, false)
+	if len(conflicts) != 0 {
+		t.Errorf("case-sensitive destination has no such conflict, got %v", conflicts)
 	}
 }

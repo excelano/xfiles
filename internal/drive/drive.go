@@ -609,6 +609,27 @@ func (d *Drive) Mkdir(ctx context.Context, g *spauth.GraphClient, path string) e
 	return err
 }
 
+// MkdirIfMissing creates the folder unless it is already there, so calling it
+// twice is the same as calling it once. Mkdir stays strict for xftp, where an
+// interactive "it's already there" is worth saying; a mirror wants the folder to
+// exist and does not care who made it.
+//
+// The existence check runs only after Mkdir fails, so the ordinary path still
+// costs one round trip. Checking that way rather than reading the 409 out of the
+// error also keeps this off Graph's exact wording: the errors here are formatted
+// strings with no status code to match on, and a message that shifts under a
+// service update would silently turn idempotence back into a failed run.
+func (d *Drive) MkdirIfMissing(ctx context.Context, g *spauth.GraphClient, path string) error {
+	err := d.Mkdir(ctx, g, path)
+	if err == nil {
+		return nil
+	}
+	if _, statErr := d.Stat(ctx, g, path); statErr == nil {
+		return nil
+	}
+	return err
+}
+
 // Remove deletes the file or folder at the library-relative path. (FTP
 // "delete"/"rmdir".) Folder deletes are recursive in Graph, so callers should
 // confirm first.
