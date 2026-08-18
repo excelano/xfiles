@@ -25,6 +25,11 @@ on:
         required: false
         default: false
         type: boolean
+      rollback-definitions:
+        description: "Roll Defender definitions back to baseline first (chase a retired detection)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   scan:
@@ -35,3 +40,4 @@ jobs:
       # runner's antivirus as a matter of course; this is for the case where a
       # detection is firing somewhere else and its name is needed.
       dynamic: ${{ github.event_name == 'workflow_dispatch' && inputs.dynamic }}
+      rollback-definitions: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback-definitions }}
