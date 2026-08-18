@@ -1,0 +1,28 @@
+name: Defender scan
+
+# The scan itself lives in excelano/.github, so every repo in the fleet runs the
+# same one and a correction reaches all of them at once. What stays here is when
+# to run and which tag to scan: that is this repo's business, the policy is the
+# fleet's. Same split as ci.yml and codeql.yml.
+#
+# It runs on release rather than on push because what matters is the bytes a
+# user downloads and a winget manifest pins by hash, and those exist only once
+# the release is published. The dispatch trigger is for scanning a tag that
+# shipped before this workflow did, or re-scanning an old one against current
+# signatures — a detection that appears on unchanged bytes is a signature
+# change, which is worth being able to demonstrate.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to scan, e.g. v1.9.0"
+        required: true
+        type: string
+
+jobs:
+  scan:
+    uses: excelano/.github/.github/workflows/defender-scan.yml@main
+    with:
+      tag: ${{ github.event.inputs.tag || github.event.release.tag_name }}
