@@ -3,14 +3,14 @@ name: Defender scan
 # The scan itself lives in excelano/.github, so every repo in the fleet runs the
 # same one and a correction reaches all of them at once. What stays here is when
 # to run and which tag to scan: that is this repo's business, the policy is the
-# fleet's. Same split as ci.yml and codeql.yml.
+# fleet's. Same split as ci.yml and codeql.yml, and this file is byte-identical
+# across every winget-shipping repo — change it there, not here.
 #
-# It runs on release rather than on push because what matters is the bytes a
-# user downloads and a winget manifest pins by hash, and those exist only once
-# the release is published. The dispatch trigger is for scanning a tag that
-# shipped before this workflow did, or re-scanning an old one against current
-# signatures — a detection that appears on unchanged bytes is a signature
-# change, which is worth being able to demonstrate.
+# Why it exists: winget's `08. Installation Validation` installs the package and
+# runs it, and a Defender flag at that step blocks the submission with no
+# detection name published anywhere you can read. The called workflow reproduces
+# that install-and-run under armed Defender before a manifest is ever submitted.
+# Rationale and the failure modes are documented in the called workflow itself.
 on:
   release:
     types: [published]
@@ -21,12 +21,12 @@ on:
         required: true
         type: string
       dynamic:
-        description: "Also run the binary under real-time protection to get a detection name"
+        description: "Also execute the binaries directly under armed Defender (deep diagnosis)"
         required: false
         default: false
         type: boolean
       rollback-definitions:
-        description: "Roll Defender definitions back to baseline first (chase a retired detection)"
+        description: "Roll Defender definitions back first (see the called workflow; usually void)"
         required: false
         default: false
         type: boolean
@@ -36,8 +36,7 @@ jobs:
     uses: excelano/.github/.github/workflows/defender-scan.yml@main
     with:
       tag: ${{ github.event.inputs.tag || github.event.release.tag_name }}
-      # Only ever on demand. A release should not be arming and disarming a
-      # runner's antivirus as a matter of course; this is for the case where a
-      # detection is firing somewhere else and its name is needed.
+      # Dispatch only. A release should not arm and disarm the runner's
+      # antivirus beyond what the standard passes already do.
       dynamic: ${{ github.event_name == 'workflow_dispatch' && inputs.dynamic }}
       rollback-definitions: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback-definitions }}
