@@ -20,9 +20,18 @@ on:
         description: "Release tag to scan, e.g. v1.9.0"
         required: true
         type: string
+      dynamic:
+        description: "Also run the binary under real-time protection to get a detection name"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   scan:
     uses: excelano/.github/.github/workflows/defender-scan.yml@main
     with:
       tag: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+      # Only ever on demand. A release should not be arming and disarming a
+      # runner's antivirus as a matter of course; this is for the case where a
+      # detection is firing somewhere else and its name is needed.
+      dynamic: ${{ github.event_name == 'workflow_dispatch' && inputs.dynamic }}
