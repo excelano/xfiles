@@ -158,6 +158,10 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
   `~/.config/excelano/sp-token.json` (`XDG_CONFIG_HOME` respected), so a login with any
   one of them covers the rest. A cache left by an earlier version under
   `~/.config/<tool>` is adopted on first run.
+- **State command:** `<tool> auth [--json]` reports that session (account, tenant, token
+  expiry, scopes) and exits 0 whether or not one exists. Exit 1 only when the state could
+  not be determined (cache unreadable, sign-in server unreachable); 2 for a bad
+  invocation. It never starts a sign-in.
 - To self-host with your own app registration, change `defaultClientID` in the
   [spauth](https://github.com/excelano/spauth) module and rebuild. Admin-consent guidance for IT is in
   [ADMINS.md](https://github.com/excelano/xfiles/blob/main/ADMINS.md).

@@ -120,6 +120,10 @@ What this means when driving the tools:
 - One cache for the family: a sign-in done with any tool, or with `xql sp`, covers all of
   them. A cache left by an earlier version under `~/.config/<tool>` is adopted on first
   run, so an upgrade never asks for a sign-in.
+- **Pre-flight before unattended work:** `<tool> auth --json` (any of the five gives the
+  same answer) reports the shared session — `signed_in`, `account`, `tenant`,
+  `token_expires`, `scopes` — and exits 0 either way without starting a sign-in. Branch
+  on `signed_in` rather than on a failed transfer; `false` means ask the user to sign in.
 
 ## xsync: why "unchanged" is subtle (read before mirroring)
 

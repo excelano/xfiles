@@ -31,6 +31,12 @@ func configDir() string {
 	return filepath.Join(home, ".config", "xftp")
 }
 
+// legacyTokenCache is the per-tool cache xftp kept before the family shared
+// one; adopted on first run so nobody signs in again.
+func legacyTokenCache() string {
+	return filepath.Join(configDir(), "sp-token.json")
+}
+
 // version is stamped at build time via -ldflags by goreleaser.
 var version = "(devel)"
 
@@ -48,6 +54,7 @@ func run() int {
 	usage := func(w io.Writer) {
 		fs.SetOutput(w)
 		fmt.Fprintln(w, "Usage: xftp [--library <name>] <url>")
+		fmt.Fprintln(w, "       xftp auth [--json]")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "<url> is a SharePoint site, library, or folder URL, e.g.")
 		fmt.Fprintln(w, "  https://contoso.sharepoint.com/sites/Marketing")
@@ -57,11 +64,17 @@ func run() int {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Authentication is device-code via Microsoft Graph; refresh tokens are")
 		fmt.Fprintln(w, "cached at "+spauth.CachePath()+", one session shared with xql and the other xfiles tools.")
+		fmt.Fprintln(w, "`xftp auth` reports that session without starting a sign-in.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, cli.ExitCodes)
 	}
 	fs.Usage = func() { usage(os.Stderr) }
 	args := os.Args[1:]
+	// The bare state command binds no library and needs no URL, so it is
+	// answered before the main flag set sees the line.
+	if len(args) > 0 && args[0] == "auth" {
+		return spauth.AuthCommand(context.Background(), "xftp", legacyTokenCache(), args[1:], os.Stdout, os.Stderr)
+	}
 	if cli.HelpRequested(args, fs) {
 		usage(os.Stdout)
 		return 0
@@ -93,11 +106,8 @@ func run() int {
 	siteURL := args[0]
 
 	ctx := context.Background()
-	// The per-tool cache this binary kept before the family shared one; adopted
-	// on first run so nobody signs in again.
-	legacyTokenCache := filepath.Join(configDir(), "sp-token.json")
 
-	client, err := spauth.NewPublicClient(spauth.CachePath(), legacyTokenCache)
+	client, err := spauth.NewPublicClient(spauth.CachePath(), legacyTokenCache())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Setup error: %v\n", err)
 		return 1
