@@ -59,7 +59,19 @@ commands by name with no version constraint, so a release does not touch it. It
 needs a rebuild (`build.sh xfiles`, then `add-deb.sh` the result) only when the
 set of commands changes.
 
-**The tests cannot reach SharePoint,** so a clean run says the code compiles and
-the pure logic holds, not that the Graph calls still work. Exercise the commands
-you touched against a real library before tagging, and give anything that writes
-or deletes an extra pass.
+**The unit tests cannot reach SharePoint,** so a clean `go test ./...` says the
+code compiles and the pure logic holds, not that the Graph calls still work. The
+live suite is the pass that does, and it is part of step 1 here:
+
+```sh
+XFILES_LIVE_SITE=https://<tenant>.sharepoint.com/sites/<test-site> go test -tags live ./...
+```
+
+It runs on a machine that has signed in once (any tool in the family, or `xql
+sp`), against the named site's default document library, and every test owns a
+folder it creates and removes. It cannot run in CI: device-code needs a human,
+and a refresh token in this public repo's secrets would be a live credential to
+the tenant. Give anything that writes or deletes an extra look in the output
+before tagging; the suite exercises upload by both paths, download, move,
+touch, remove and the tree walk, but a real library can only fail the way it
+chooses to on the day.
