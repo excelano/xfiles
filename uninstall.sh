@@ -1,7 +1,9 @@
 #!/bin/sh
 # xfiles uninstaller — finds and removes the xftp, xcp, xfind, xtree, and xsync binaries,
 # with an optional follow-up step to remove their config dirs under ~/.config
-# (REPL history, cached tokens). POSIX sh, no bash extensions.
+# (REPL history, and the per-tool token caches versions before the shared
+# cache left behind). The shared token cache at ~/.config/excelano is never
+# touched: xql uses it too. POSIX sh, no bash extensions.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/uninstall.sh | sh
@@ -11,7 +13,7 @@
 #                        Does NOT imply purge: config dirs are kept
 #                        unless XFILES_PURGE=1 is also set.
 #   XFILES_PURGE=1          Also remove the ~/.config/{xftp,xcp,xfind,xtree,xsync}
-#                        config dirs (history, cached tokens), independent of
+#                        config dirs (history, legacy token caches), independent of
 #                        XFILES_UNINSTALL_YES.
 
 set -eu

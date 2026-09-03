@@ -151,7 +151,7 @@ xcp "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/Q1.
 generate-report | xcp - "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/report.csv"
 ```
 
-Recursive directory copies aren't part of xcp — that job belongs to `xsync` below, which moves whole trees and transfers only what changed. xcp keeps its own token cache under `~/.config/xcp`.
+Recursive directory copies aren't part of xcp — that job belongs to `xsync` below, which moves whole trees and transfers only what changed.
 
 ## xsync — recursive mirror
 
@@ -186,8 +186,6 @@ xsync --dry-run --delete ./reports "https://contoso.sharepoint.com/sites/Marketi
 xsync --delete ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
 ```
 
-xsync keeps its own token cache under `~/.config/xsync`.
-
 ## xfind and xtree — recursive listing
 
 Where `ls` shows one folder, `xfind` and `xtree` walk a whole library. Both take a single SharePoint URL — site, library, or folder — and recurse from there, the same URL shapes the other tools accept, copy links included. Both are read-only: they only ever list.
@@ -209,13 +207,13 @@ xtree https://contoso.sharepoint.com/sites/Marketing
 xtree -L 2 -d "https://contoso.sharepoint.com/sites/Marketing/Shared Documents"
 ```
 
-Each keeps its own token cache (`~/.config/xfind`, `~/.config/xtree`).
-
 ## Authentication and tenants
 
 The suite authenticates through a multi-tenant Azure app registration ("Excelano SharePoint tools"), shared across `xftp`, `xcp`, `xsync`, `xfind`, `xtree`, and the sibling tool [xql](https://github.com/excelano/xql), so consenting once covers them all. Pointing a tool at another organization's site uses that same registration — nobody sets up their own. The first connection to a new tenant raises a one-time consent prompt; depending on that tenant's policy, either the user or an administrator clears it, after which everyone in the tenant is covered. The single scope requested is `Sites.ReadWrite.All`. If your organization restricts user consent, [ADMINS.md](ADMINS.md) has everything your IT department needs to review and approve the application.
 
-To use your own app registration instead, change `defaultClientID` in `internal/spauth/auth.go` and rebuild.
+The session is shared as well as the consent. Sign-in is device-code: the first connection prints a short code and a URL, you sign in once in a browser, and the refresh token is cached at `~/.config/excelano/sp-token.json` (mode 0600, under `$XDG_CONFIG_HOME` when set), one file for all five tools and for `xql sp`, so signing in with any of them signs in the rest. A cache left by an earlier version under `~/.config/<tool>` is adopted the first time the new version runs, so upgrading costs no sign-in. Delete the shared file to force re-authentication for the whole family.
+
+The sign-in layer lives in its own module, [spauth](https://github.com/excelano/spauth), which this repository and xql both import. To use your own app registration instead, change `defaultClientID` there and rebuild.
 
 ## Large files and transfers
 

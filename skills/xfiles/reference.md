@@ -27,7 +27,7 @@ Exactly one of source/destination is a SharePoint URL; that side sets the direct
 | `-` as the **destination** | remote file cat'd to stdout (clean byte stream for pipes) |
 | `-` as the **source** | upload from stdin — the URL must name the target file (stdin has no name) |
 
-No recursive copy — that's `xsync`. Token cache: `~/.config/xcp`.
+No recursive copy — that's `xsync`.
 
 ## xftp — interactive session (ftp)
 
@@ -56,8 +56,7 @@ quoted (`"Phase 2"`, `'Phase 2'`) or escaped (`Phase\ 2`) as in a shell.
 | `quit` | exit |
 
 Single-file `rm` goes straight through (recoverable from the recycle bin); folder `rm`
-is recursive and irreversible from xftp's side, so it confirms first. Token cache:
-`~/.config/xftp`.
+is recursive and irreversible from xftp's side, so it confirms first..
 
 ## xsync — recursive mirror (rsync)
 
@@ -84,8 +83,7 @@ mtime on download so the comparison holds across runs; a browser edit moves that
 timestamp too, so remote changes are still caught. On a **same-size,
 disagreeing-timestamp** file it falls back to comparing **QuickXorHash** on both sides.
 The gap: contents changing without the mtime moving reads as unchanged — use
-`--ignore-times`. Default is add/update only; deletion requires `--delete`. Token cache:
-`~/.config/xsync`.
+`--ignore-times`. Default is add/update only; deletion requires `--delete`..
 
 **Case, when uploading.** SharePoint preserves case but does not distinguish by it, so
 `D1` and `d1` are one folder there. Uploads compare with case folded: a local `d1/`
@@ -112,8 +110,6 @@ it pipes into `wc`, `grep`, `xargs`, etc. Read-only.
 | `--library <NAME>` | force the library |
 
 `--type d` skips listing file entries entirely (an efficiency win, not just a filter).
-Token cache: `~/.config/xfind`.
-
 ## xtree — indented tree (tree)
 
 ```
@@ -128,8 +124,6 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
 | `-L <n>` | show at most `n` levels (`0` = unlimited) |
 | `-d` | folders only |
 | `--library <NAME>` | force the library |
-
-Token cache: `~/.config/xtree`.
 
 ## Invocation
 
@@ -160,11 +154,12 @@ Token cache: `~/.config/xtree`.
   is attached to complete device-code sign-in`. Only the device-code path is gated — a
   cached refresh token still renews silently under cron or an agent, which is why the
   remedy is to run the command once interactively and then re-run it unattended.
-- **Per-tool caches:** each binary caches its refresh token under `~/.config/<tool>`
-  (`XDG_CONFIG_HOME` respected), so a login with one tool doesn't silence another's
-  first run.
-- To self-host with your own app registration, change `defaultClientID` in
-  `internal/spauth/auth.go` and rebuild. Admin-consent guidance for IT is in
+- **One shared cache:** every tool, and `xql sp`, reads and writes
+  `~/.config/excelano/sp-token.json` (`XDG_CONFIG_HOME` respected), so a login with any
+  one of them covers the rest. A cache left by an earlier version under
+  `~/.config/<tool>` is adopted on first run.
+- To self-host with your own app registration, change `defaultClientID` in the
+  [spauth](https://github.com/excelano/spauth) module and rebuild. Admin-consent guidance for IT is in
   [ADMINS.md](https://github.com/excelano/xfiles/blob/main/ADMINS.md).
 
 ## Transfers and large files

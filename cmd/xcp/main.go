@@ -3,7 +3,8 @@
 // Microsoft Graph. Exactly one of the two arguments is a SharePoint URL, and
 // its position decides the direction — `xcp report.xlsx <url>` uploads,
 // `xcp <url> ./` downloads — the way scp keys off which side carries host:.
-// Authentication is device-code; refresh tokens are cached under ~/.config/xcp.
+// Authentication is device-code; the refresh token is cached at
+// ~/.config/excelano/sp-token.json, shared with xql and the other xfiles tools.
 package main
 
 import (
@@ -124,7 +125,7 @@ func run() int {
 		fs.PrintDefaults()
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Authentication is device-code via Microsoft Graph; refresh tokens are")
-		fmt.Fprintln(w, "cached at "+filepath.Join(configDir(), "sp-token.json")+".")
+		fmt.Fprintln(w, "cached at "+spauth.CachePath()+", one session shared with xql and the other xfiles tools.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, cli.ExitCodes)
 	}
@@ -170,9 +171,11 @@ func run() int {
 	}
 
 	ctx := context.Background()
-	tokenCachePath := filepath.Join(configDir(), "sp-token.json")
+	// The per-tool cache this binary kept before the family shared one; adopted
+	// on first run so nobody signs in again.
+	legacyTokenCache := filepath.Join(configDir(), "sp-token.json")
 
-	client, err := spauth.NewPublicClient(tokenCachePath)
+	client, err := spauth.NewPublicClient(spauth.CachePath(), legacyTokenCache)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Setup error: %v\n", err)
 		return 1

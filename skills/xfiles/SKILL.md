@@ -100,8 +100,10 @@ answer, not a failure.
 Every tool in the suite — plus the sibling [xql](https://github.com/excelano/xql) — shares one
 multi-tenant Entra app registration and one delegated scope, `Sites.ReadWrite.All`.
 Authentication is **device-code**: the first connection prints a short code and a URL,
-you sign in once in a browser, and the refresh token is cached under `~/.config/<tool>`
-so later runs are silent. Consenting once covers the whole family.
+you sign in once in a browser, and the refresh token is cached at
+`~/.config/excelano/sp-token.json`, one file shared by all five tools and by `xql sp`, so
+later runs of any of them are silent. Consenting once covers the whole family, and so
+does signing in once.
 
 What this means when driving the tools:
 
@@ -115,8 +117,9 @@ What this means when driving the tools:
   no flag that gets past it, because the flow needs a browser and a human.
 - A tool run against an already-authenticated tenant just works; expect an
   `Authenticated as: <upn>` line on stderr.
-- Each tool keeps its **own** token cache (`~/.config/xftp`, `~/.config/xcp`, …), so a
-  login done with one tool doesn't silence the first run of another.
+- One cache for the family: a sign-in done with any tool, or with `xql sp`, covers all of
+  them. A cache left by an earlier version under `~/.config/<tool>` is adopted on first
+  run, so an upgrade never asks for a sign-in.
 
 ## xsync: why "unchanged" is subtle (read before mirroring)
 
