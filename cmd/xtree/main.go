@@ -17,11 +17,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/excelano/spauth"
 	"github.com/excelano/xfiles"
 	"github.com/excelano/xfiles/internal/buildinfo"
 	"github.com/excelano/xfiles/internal/cli"
 	"github.com/excelano/xfiles/internal/drive"
-	"github.com/excelano/xfiles/internal/spauth"
 )
 
 func configDir() string {

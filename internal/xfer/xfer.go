@@ -13,8 +13,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/excelano/spauth"
 	"github.com/excelano/xfiles/internal/drive"
-	"github.com/excelano/xfiles/internal/spauth"
 )
 
 // progressThreshold is the file size above which a transfer prints a progress

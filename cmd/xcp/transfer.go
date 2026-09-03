@@ -9,8 +9,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/excelano/spauth"
 	"github.com/excelano/xfiles/internal/drive"
-	"github.com/excelano/xfiles/internal/spauth"
 	"github.com/excelano/xfiles/internal/xfer"
 )
 

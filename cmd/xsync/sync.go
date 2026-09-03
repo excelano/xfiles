@@ -16,8 +16,8 @@ import (
 	"github.com/excelano/quickxorhash"
 	"golang.org/x/term"
 
+	"github.com/excelano/spauth"
 	"github.com/excelano/xfiles/internal/drive"
-	"github.com/excelano/xfiles/internal/spauth"
 	"github.com/excelano/xfiles/internal/xfer"
 )
 

@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/excelano/xfiles/internal/spauth"
+	"github.com/excelano/spauth"
 )
 
 // Drive is a resolved SharePoint document library the session operates on.
