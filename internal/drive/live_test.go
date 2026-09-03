@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -178,5 +179,48 @@ func TestLiveWalk(t *testing.T) {
 	}
 	if fmt.Sprint(seen) != fmt.Sprint([]string{"a", "b"}) {
 		t.Errorf("foldersOnly walk visited %v, want [a b]", seen)
+	}
+}
+
+// ResolveDrive's three selection rules against one site: default library,
+// explicit --library name, and a folder URL below the site that both picks
+// the library and sets the starting path.
+func TestLiveResolveDriveVariants(t *testing.T) {
+	ctx, g, byDefault := liveDrive(t)
+	site := os.Getenv("XFILES_LIVE_SITE")
+	folder := fixtureFolder(t, ctx, g, byDefault)
+
+	byName, err := ResolveDrive(ctx, g, site, byDefault.Name)
+	if err != nil {
+		t.Fatalf("ResolveDrive by library name %q: %v", byDefault.Name, err)
+	}
+	if byName.DriveID != byDefault.DriveID {
+		t.Errorf("by name bound drive %s, default bound %s", byName.DriveID, byDefault.DriveID)
+	}
+	if _, err := ResolveDrive(ctx, g, site, "no-such-library-"+folder); err == nil {
+		t.Error("ResolveDrive with an unknown library name should fail")
+	}
+
+	// The library's webUrl segment for the default library is "Shared Documents"
+	// on English-language sites; derive it from the drive rather than assume.
+	body, err := g.Get(ctx, "/drives/"+byDefault.DriveID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta struct {
+		WebURL string `json:"webUrl"`
+	}
+	if err := json.Unmarshal(body, &meta); err != nil || meta.WebURL == "" {
+		t.Fatalf("drive has no webUrl: %v", err)
+	}
+	byURL, err := ResolveDrive(ctx, g, meta.WebURL+"/"+folder, "")
+	if err != nil {
+		t.Fatalf("ResolveDrive by folder URL: %v", err)
+	}
+	if byURL.DriveID != byDefault.DriveID {
+		t.Errorf("by URL bound drive %s, default bound %s", byURL.DriveID, byDefault.DriveID)
+	}
+	if byURL.StartPath != folder {
+		t.Errorf("by URL StartPath = %q, want %q", byURL.StartPath, folder)
 	}
 }
