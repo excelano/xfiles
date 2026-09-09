@@ -53,4 +53,3 @@ jobs:
     uses: excelano/.github/.github/workflows/deb-smoke.yml@main
     with:
       tag: ${{ github.event.inputs.tag || github.ref_name }}
-      commands: 'xcp xfind xftp xsync xtree'
