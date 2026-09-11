@@ -223,13 +223,13 @@ Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in prog
 
 ## Use it from Claude Code
 
-xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which tool to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. The binary installs it:
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which tool to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Any command in the repo installs it, since the skill is compiled into each of them:
 
 ```sh
-xfiles --install-skill
+xcp --install-skill
 ```
 
-That writes `~/.claude/skills/xfiles/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `xfiles --uninstall-skill` removes it. Restart Claude Code afterwards, since skills are discovered at session start.
+That writes `~/.claude/skills/xfiles/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
 The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, cargo, the curl one-liner, or a build from source.
 
