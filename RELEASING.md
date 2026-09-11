@@ -9,8 +9,12 @@ This file carries what is true of xfiles and not of its siblings.
 |---|---|
 | Loop | goreleaser |
 | `apt-ship` argument | `xfiles` |
-| winget packages | `Excelano.<command>`, one per command |
-| Windows asset | `<command>_<version>_windows_amd64.zip` |
+| Packages per release | 10, amd64 arm64 |
+| winget package | `Excelano.xcp` — `xcp_<version>_windows_amd64.zip` |
+| winget package | `Excelano.xfind` — `xfind_<version>_windows_amd64.zip` |
+| winget package | `Excelano.xftp` — `xftp_<version>_windows_amd64.zip` |
+| winget package | `Excelano.xsync` — `xsync_<version>_windows_amd64.zip` |
+| winget package | `Excelano.xtree` — `xtree_<version>_windows_amd64.zip` |
 
 **One tag releases every command in the repo.** There is no per-command version
 and no way to ship one of them alone: goreleaser builds every entry in
