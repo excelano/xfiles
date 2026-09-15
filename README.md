@@ -47,22 +47,6 @@ There's no metapackage, so name the tools you want. `brew upgrade` keeps them cu
 brew install xftp xcp xsync xfind xtree && xcp --install-skill
 ```
 
-### Prebuilt binary (Linux and macOS, x86_64 and arm64)
-
-The install script fetches prebuilt binaries and drops the whole suite into one directory:
-
-```
-curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sh
-```
-
-If the installer needs to write to a root-owned directory like `/usr/local/bin`, wrap `sh`, not `curl`:
-
-```
-curl -fsSL https://raw.githubusercontent.com/excelano/xfiles/main/install.sh | sudo sh
-```
-
-Pin a version by setting `XFILES_VERSION` to any release tag, or install elsewhere with `XFILES_INSTALL_DIR=$HOME/bin`. To uninstall, run the matching `uninstall.sh` the same way, which removes them again.
-
 ### Go
 
 From source (Go 1.24 or later):
@@ -231,7 +215,7 @@ xcp --install-skill
 
 That writes `~/.claude/skills/xfiles/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
-The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, cargo, the curl one-liner, or a build from source.
+The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, cargo, or a build from source.
 
 ## Building
 
