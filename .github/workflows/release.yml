@@ -1,12 +1,13 @@
 name: release
 
-# Triggers on any tag matching v*, e.g. v1.0.1 or v2.0.0-rc1. workflow_dispatch
-# is the manual fallback in case a tag was created by another workflow's
-# GITHUB_TOKEN (which does not fire downstream "push" triggers).
+# The release is created with a person's token, which fires `release:
+# published`, so this starts itself and goreleaser attaches its archives,
+# packages and checksums to the release that is already there. A release
+# created with a workflow's GITHUB_TOKEN fires nothing, and is dispatched by
+# hand instead.
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -28,7 +29,7 @@ jobs:
           # goreleaser uses git history to build the changelog, so we need
           # full clone history rather than the default shallow one.
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -52,4 +53,4 @@ jobs:
     needs: goreleaser
     uses: excelano/.github/.github/workflows/deb-smoke.yml@main
     with:
-      tag: ${{ github.event.inputs.tag || github.ref_name }}
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
