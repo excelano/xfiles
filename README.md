@@ -226,7 +226,3 @@ go build -o xsync ./cmd/xsync
 go build -o xfind ./cmd/xfind
 go build -o xtree ./cmd/xtree
 ```
-
----
-
-Built by David M. Anderson, with AI assistance.
