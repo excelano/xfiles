@@ -2,7 +2,7 @@
 
 This page is for the person who approves applications in a Microsoft 365 tenant. If a colleague has asked you to allow xftp, everything you need to make that decision is below.
 
-xftp is a command-line tool that gives a SharePoint document library the feel of an FTP session. It runs locally on the user's own machine, signs in as that user through Microsoft's device-code flow, and talks to SharePoint over the Microsoft Graph API. There is no server, no daemon, no background process, and no service account. It can do nothing the signed-in user could not already do in SharePoint Online through a browser. The same repository ships companion tools — xcp (a one-shot, scp-style copy), xsync (a recursive rsync-style mirror), and the read-only xfind and xtree (recursive listing) — which use the identical application registration and the identical delegated permission. Everything on this page applies equally to all of them.
+xftp is a command-line tool that gives a SharePoint document library the feel of an FTP session. It runs locally on the user's own machine, signs in as that user through Microsoft's device-code flow, and talks to SharePoint over the Microsoft Graph API. There is no server, no daemon, no background process, and no service account. It can do nothing the signed-in user could not already do in SharePoint Online through a browser. The other xfiles commands, and the SharePoint backend of the sibling tool [xql](https://github.com/excelano/xql), use the identical application registration and the identical delegated permission, so a single consent decision covers them all. Everything on this page applies equally to each of them.
 
 ## The application you would be approving
 

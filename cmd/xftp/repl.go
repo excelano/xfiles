@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -77,11 +80,14 @@ func saveHistory(line *liner.State, path string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return
 	}
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+	// The mode above applies only when the file is created, so an existing
+	// history file keeps whatever mode it already has.
+	f.Chmod(0600)
 	line.WriteHistory(f)
 }
 
