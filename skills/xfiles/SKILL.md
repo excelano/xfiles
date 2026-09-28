@@ -101,7 +101,7 @@ Every tool in the suite — plus the sibling [xql](https://github.com/excelano/x
 multi-tenant Entra app registration and one delegated scope, `Sites.ReadWrite.All`.
 Authentication is **device-code**: the first connection prints a short code and a URL,
 you sign in once in a browser, and the refresh token is cached at
-`~/.config/excelano/sp-token.json`, one file shared by all five tools and by `xql sp`, so
+`~/.config/excelano/sp-token.json`, one file shared by every tool in the suite and by `xql sp`, so
 later runs of any of them are silent. Consenting once covers the whole family, and so
 does signing in once.
 
