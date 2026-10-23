@@ -121,8 +121,11 @@ library, keeps only hits below the URL's folder, and prints them in path order; 
 `--iname`, `--type`, `--maxdepth`, and `--url` still apply. The index trails uploads,
 often by many minutes and unevenly from file to file, and returns what it ranks rather
 than a complete listing, so an empty result is not proof of absence. `--search ''` is a
-bad invocation (exit 2). Without `--search`, `--type d` skips listing file entries entirely (an efficiency
-win, not just a filter).
+bad invocation (exit 2).
+
+A walk with no depth limit fetches everything below the URL in a few requests, so a
+large tree costs seconds; a `--maxdepth` (or xtree `-L`) walk lists one folder per
+request instead, which is quicker only while the limit stays shallow.
 
 ## xtree — indented tree (tree)
 

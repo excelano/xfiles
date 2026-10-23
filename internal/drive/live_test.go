@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,45 +154,61 @@ func TestLiveFileLifecycle(t *testing.T) {
 	}
 }
 
-// Walk is what xtree and xfind are built on: it has to visit a nested tree in
-// order, report depth, and honour foldersOnly.
+// Walk is what xtree, xfind and xsync are built on: it has to visit a nested
+// tree in order, report depth, and honour foldersOnly and maxDepth, the same
+// way whether it fetched the tree by delta query or folder by folder.
 func TestLiveWalk(t *testing.T) {
 	ctx, g, d := liveDrive(t)
 	folder := fixtureFolder(t, ctx, g, d)
-	for _, p := range []string{folder + "/a", folder + "/a/b"} {
+	for _, p := range []string{folder + "/a", folder + "/a/b", folder + "/Mixed Case"} {
 		if err := d.Mkdir(ctx, g, p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, p := range []string{folder + "/top.txt", folder + "/a/b/deep.txt"} {
+	for _, p := range []string{folder + "/top.txt", folder + "/a/b/deep.txt", folder + "/Mixed Case/x #1.txt"} {
 		if _, err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader([]byte("x")), 1); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	var seen []string
-	err := d.Walk(ctx, g, folder, false, func(it Item, itemPath string, depth int, isLast bool) bool {
-		seen = append(seen, fmt.Sprintf("%d:%s", depth, it.Name))
-		return true
-	})
+	// The delta path must not be failing over to listing unnoticed.
+	children, err := d.subtree(ctx, g, folder)
 	if err != nil {
-		t.Fatalf("Walk: %v", err)
+		t.Fatalf("delta subtree: %v", err)
 	}
-	want := []string{"1:a", "2:b", "3:deep.txt", "1:top.txt"}
-	if fmt.Sprint(seen) != fmt.Sprint(want) {
-		t.Errorf("Walk visited %v, want %v", seen, want)
+	if n := len(children[strings.ToLower(folder+"/Mixed Case")]); n != 1 {
+		t.Errorf("delta subtree has %d children under Mixed Case, want 1", n)
 	}
 
-	seen = nil
-	err = d.Walk(ctx, g, folder, true, func(it Item, itemPath string, depth int, isLast bool) bool {
-		seen = append(seen, it.Name)
-		return true
-	})
-	if err != nil {
-		t.Fatalf("Walk foldersOnly: %v", err)
+	walk := func(root string, maxDepth int, foldersOnly bool) []string {
+		t.Helper()
+		var seen []string
+		err := d.Walk(ctx, g, root, maxDepth, foldersOnly, func(it Item, itemPath string, depth int, isLast bool) bool {
+			seen = append(seen, fmt.Sprintf("%d:%s:%v", depth, it.Name, isLast))
+			return true
+		})
+		if err != nil {
+			t.Fatalf("Walk(%q, %d, %v): %v", root, maxDepth, foldersOnly, err)
+		}
+		return seen
 	}
-	if fmt.Sprint(seen) != fmt.Sprint([]string{"a", "b"}) {
-		t.Errorf("foldersOnly walk visited %v, want [a b]", seen)
+
+	want := []string{"1:a:false", "2:b:true", "3:deep.txt:true", "1:Mixed Case:false", "2:x #1.txt:true", "1:top.txt:true"}
+	byDelta := walk(folder, 0, false)
+	if fmt.Sprint(byDelta) != fmt.Sprint(want) {
+		t.Errorf("delta walk visited %v, want %v", byDelta, want)
+	}
+	if byListing := walk(folder, 99, false); fmt.Sprint(byListing) != fmt.Sprint(byDelta) {
+		t.Errorf("listing walk visited %v, delta walk %v", byListing, byDelta)
+	}
+	if upper := walk(strings.ToUpper(folder), 0, false); fmt.Sprint(upper) != fmt.Sprint(byDelta) {
+		t.Errorf("delta walk from an upper-cased root visited %v, want %v", upper, byDelta)
+	}
+	if got := walk(folder, 0, true); fmt.Sprint(got) != fmt.Sprint([]string{"1:a:false", "2:b:true", "1:Mixed Case:true"}) {
+		t.Errorf("foldersOnly walk visited %v", got)
+	}
+	if got := walk(folder, 1, false); fmt.Sprint(got) != fmt.Sprint([]string{"1:a:false", "1:Mixed Case:false", "1:top.txt:true"}) {
+		t.Errorf("maxDepth 1 walk visited %v", got)
 	}
 }
 

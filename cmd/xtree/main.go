@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Command xtree is the tree(1) of the xftp family: it walks a SharePoint
 // document library recursively and prints it as an indented tree, with the
 // ├──/└── guides tree users expect, then a "N directories, M files" summary.
@@ -192,7 +195,7 @@ func run() int {
 
 	var dirs, files int
 	var ancestorLast []bool
-	walkErr := d.Walk(tctx, g, root, *dirsOnly, func(it drive.Item, _ string, depth int, isLast bool) bool {
+	walkErr := d.Walk(tctx, g, root, *level, *dirsOnly, func(it drive.Item, _ string, depth int, isLast bool) bool {
 		fmt.Fprintf(out, "%s%s%s\n", treePrefix(ancestorLast[:depth-1]), connector(isLast), it.Name)
 		if it.IsFolder {
 			dirs++
@@ -202,7 +205,7 @@ func run() int {
 		// Record this node's last-ness at its depth so its children can draw the
 		// correct guide above themselves.
 		ancestorLast = append(ancestorLast[:depth-1], isLast)
-		return it.IsFolder && (*level == 0 || depth < *level)
+		return true
 	})
 	out.Flush()
 	if walkErr != nil {

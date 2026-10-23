@@ -4,6 +4,7 @@
 package drive
 
 import (
+	"fmt"
 	"net/url"
 	"testing"
 )
@@ -143,6 +144,39 @@ func TestLibraryPath(t *testing.T) {
 		got, ok := libraryPath(lib, c.in)
 		if got != c.want || ok != c.ok {
 			t.Errorf("%s: libraryPath = (%q, %v), want (%q, %v)", c.name, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+func TestWalkDir(t *testing.T) {
+	tree := map[string][]Item{
+		"":       {{Name: "b.txt"}, {Name: "A", IsFolder: true}, {Name: "c", IsFolder: true}},
+		"A":      {{Name: "deep", IsFolder: true}, {Name: "z.txt"}},
+		"A/deep": {{Name: "x.txt"}},
+		"c":      {},
+	}
+	list := func(dir string) ([]Item, error) { return append([]Item(nil), tree[dir]...), nil }
+	walk := func(maxDepth int, foldersOnly bool) string {
+		var seen []string
+		walkDir(list, "", 1, maxDepth, foldersOnly, func(it Item, p string, depth int, isLast bool) bool {
+			seen = append(seen, fmt.Sprintf("%d:%s:%v", depth, p, isLast))
+			return true
+		})
+		return fmt.Sprint(seen)
+	}
+	cases := []struct {
+		name        string
+		maxDepth    int
+		foldersOnly bool
+		want        string
+	}{
+		{"everything", 0, false, "[1:A:false 2:A/deep:false 3:A/deep/x.txt:true 2:A/z.txt:true 1:b.txt:false 1:c:true]"},
+		{"depth limit", 1, false, "[1:A:false 1:b.txt:false 1:c:true]"},
+		{"folders only, last folder is last", 0, true, "[1:A:false 2:A/deep:true 1:c:true]"},
+	}
+	for _, c := range cases {
+		if got := walk(c.maxDepth, c.foldersOnly); got != c.want {
+			t.Errorf("%s: visited %s, want %s", c.name, got, c.want)
 		}
 	}
 }

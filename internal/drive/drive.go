@@ -365,7 +365,8 @@ type driveItemJSON struct {
 	FileSystemInfo *struct {
 		LastModifiedDateTime string `json:"lastModifiedDateTime"`
 	} `json:"fileSystemInfo"`
-	WebURL string `json:"webUrl"`
+	WebURL  string    `json:"webUrl"`
+	Deleted *struct{} `json:"deleted"`
 }
 
 func (j driveItemJSON) toItem() Item {
@@ -428,21 +429,32 @@ func SortChildren(items []Item) {
 // item, its library-relative path, its depth below root (root's direct children
 // are depth 1), and whether it is the last child of its parent (so a tree view
 // can draw └── vs ├──). When visit returns false for a folder, the walk does not
-// descend into it — that's how depth and type filters prune the traversal. A
-// List failure on any folder stops the walk and is returned.
+// descend into it, and it never descends below maxDepth (0 = unlimited). A
+// listing failure stops the walk and is returned.
+//
+// An unlimited walk fetches the whole subtree in one paged delta query and
+// visits it from memory, which costs a few requests where listing costs one per
+// folder. A depth-limited walk lists folder by folder instead, since delta always
+// returns everything below root, and so does any walk whose delta query fails.
 //
 // When foldersOnly is set, files are dropped from each listing before visiting,
 // so isLast reflects the last *folder* in a directory rather than the last item.
 // A tree drawn from a folders-only walk would otherwise mark the last subfolder
 // with ├── whenever a file sorts after it but goes unshown.
-func (d *Drive) Walk(ctx context.Context, g *spauth.GraphClient, root string, foldersOnly bool,
+func (d *Drive) Walk(ctx context.Context, g *spauth.GraphClient, root string, maxDepth int, foldersOnly bool,
 	visit func(it Item, itemPath string, depth int, isLast bool) (descend bool)) error {
-	return d.walkDir(ctx, g, root, 1, foldersOnly, visit)
+	list := func(dir string) ([]Item, error) { return d.List(ctx, g, dir) }
+	if maxDepth == 0 {
+		if children, err := d.subtree(ctx, g, root); err == nil {
+			list = func(dir string) ([]Item, error) { return children[strings.ToLower(dir)], nil }
+		}
+	}
+	return walkDir(list, root, 1, maxDepth, foldersOnly, visit)
 }
 
-func (d *Drive) walkDir(ctx context.Context, g *spauth.GraphClient, dir string, depth int, foldersOnly bool,
+func walkDir(list func(dir string) ([]Item, error), dir string, depth, maxDepth int, foldersOnly bool,
 	visit func(it Item, itemPath string, depth int, isLast bool) bool) error {
-	items, err := d.List(ctx, g, dir)
+	items, err := list(dir)
 	if err != nil {
 		return fmt.Errorf("listing /%s: %w", strings.Trim(dir, "/"), err)
 	}
@@ -460,13 +472,82 @@ func (d *Drive) walkDir(ctx context.Context, g *spauth.GraphClient, dir string, 
 		p := path.Join(dir, it.Name)
 		isLast := i == len(items)-1
 		descend := visit(it, p, depth, isLast)
-		if it.IsFolder && descend {
-			if err := d.walkDir(ctx, g, p, depth+1, foldersOnly, visit); err != nil {
+		if it.IsFolder && descend && (maxDepth == 0 || depth < maxDepth) {
+			if err := walkDir(list, p, depth+1, maxDepth, foldersOnly, visit); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// subtree lists everything below the library-relative root with a delta query
+// and groups it by parent folder, keyed by lower-cased library-relative path
+// (SharePoint paths are case-insensitive, and root may be spelled as the user
+// typed it). Delta can return an item more than once, the last copy being
+// current, and marks removed items deleted; both are resolved here.
+func (d *Drive) subtree(ctx context.Context, g *spauth.GraphClient, root string) (map[string][]Item, error) {
+	libURL, err := d.libraryURL(ctx, g)
+	if err != nil {
+		return nil, err
+	}
+	raws, err := g.GetAll(ctx, fmt.Sprintf("/drives/%s%s/delta", d.DriveID, itemRef(root)), url.Values{
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl,deleted"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	latest := map[string]driveItemJSON{}
+	var order []string
+	for _, raw := range raws {
+		var j driveItemJSON
+		if err := json.Unmarshal(raw, &j); err != nil {
+			return nil, fmt.Errorf("decoding delta item: %w", err)
+		}
+		if _, seen := latest[j.ID]; !seen {
+			order = append(order, j.ID)
+		}
+		latest[j.ID] = j
+	}
+	rootSegs := urlPathSegments(root)
+	children := map[string][]Item{}
+	for _, id := range order {
+		j := latest[id]
+		if j.Deleted != nil {
+			continue
+		}
+		p, ok := libraryPath(libURL, j.WebURL)
+		if !ok {
+			continue
+		}
+		segs := urlPathSegments(p)
+		if len(segs) <= len(rootSegs) || !segsHasPrefix(segs, rootSegs) {
+			continue
+		}
+		parent := strings.ToLower(strings.Join(segs[:len(segs)-1], "/"))
+		children[parent] = append(children[parent], j.toItem())
+	}
+	return children, nil
+}
+
+// libraryURL fetches the library's own webUrl, the prefix every item's webUrl
+// is resolved against.
+func (d *Drive) libraryURL(ctx context.Context, g *spauth.GraphClient) (*url.URL, error) {
+	body, err := g.Get(ctx, "/drives/"+d.DriveID, url.Values{"$select": {"webUrl"}})
+	if err != nil {
+		return nil, err
+	}
+	var lib struct {
+		WebURL string `json:"webUrl"`
+	}
+	if err := json.Unmarshal(body, &lib); err != nil {
+		return nil, fmt.Errorf("decoding library: %w", err)
+	}
+	u, err := url.Parse(lib.WebURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing library webUrl: %w", err)
+	}
+	return u, nil
 }
 
 // SearchHit is one search result: the item and its library-relative path.
@@ -482,19 +563,9 @@ type SearchHit struct {
 // its webUrl, and hits outside root are dropped, so the scope holds whatever
 // the service does with the folder in the request.
 func (d *Drive) Search(ctx context.Context, g *spauth.GraphClient, root, query string) ([]SearchHit, error) {
-	body, err := g.Get(ctx, "/drives/"+d.DriveID, url.Values{"$select": {"webUrl"}})
+	libURL, err := d.libraryURL(ctx, g)
 	if err != nil {
 		return nil, err
-	}
-	var lib struct {
-		WebURL string `json:"webUrl"`
-	}
-	if err := json.Unmarshal(body, &lib); err != nil {
-		return nil, fmt.Errorf("decoding library: %w", err)
-	}
-	libURL, err := url.Parse(lib.WebURL)
-	if err != nil {
-		return nil, fmt.Errorf("parsing library webUrl: %w", err)
 	}
 
 	q := url.PathEscape(strings.ReplaceAll(query, "'", "''"))

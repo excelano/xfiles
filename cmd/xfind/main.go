@@ -252,11 +252,9 @@ func run() int {
 			}
 		}
 	} else {
-		// With -type d we never emit files, so skip listing them entirely.
-		findErr = d.Walk(tctx, g, root, c.typ == "d", func(it drive.Item, p string, depth int, _ bool) bool {
+		findErr = d.Walk(tctx, g, root, *maxDepth, c.typ == "d", func(it drive.Item, p string, _ int, _ bool) bool {
 			emit(it, p)
-			// Descend into folders unless a depth limit says to stop here.
-			return it.IsFolder && (*maxDepth == 0 || depth < *maxDepth)
+			return true
 		})
 	}
 	out.Flush()
