@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Package xfer holds the file-transfer core shared by xftp's interactive REPL
 // and the xcp one-shot command: a crash-safe download (temp file renamed on
 // success), a chunked upload, and a progress display. Keeping it here means both
@@ -87,20 +90,21 @@ func downloadTo(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remo
 // `remote`. Files at or below the simple-upload ceiling go in a single PUT;
 // larger ones use a chunked, resumable session (see drive.Upload). Progress
 // prints to stderr for files over progressThreshold. It returns the number of
-// bytes sent. A local directory is rejected. On ctx cancellation the returned
-// error wraps ctx.Err().
-func Upload(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, localPath, remote string) (int64, error) {
+// bytes sent and the stored item, whose size differs from the bytes sent when
+// SharePoint rewrites an Office file. A local directory is rejected. On ctx
+// cancellation the returned error wraps ctx.Err().
+func Upload(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, localPath, remote string) (int64, drive.Item, error) {
 	f, err := os.Open(localPath)
 	if err != nil {
-		return 0, err
+		return 0, drive.Item{}, err
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return 0, err
+		return 0, drive.Item{}, err
 	}
 	if info.IsDir() {
-		return 0, fmt.Errorf("%s is a directory", localPath)
+		return 0, drive.Item{}, fmt.Errorf("%s is a directory", localPath)
 	}
 
 	var r io.Reader = f
@@ -110,13 +114,14 @@ func Upload(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, localPat
 	}
 
 	ctype := mime.TypeByExtension(filepath.Ext(localPath))
-	if err := d.Upload(ctx, g, remote, ctype, r, info.Size()); err != nil {
+	item, err := d.Upload(ctx, g, remote, ctype, r, info.Size())
+	if err != nil {
 		if ctx.Err() != nil {
-			return 0, fmt.Errorf("interrupted: %w", ctx.Err())
+			return 0, drive.Item{}, fmt.Errorf("interrupted: %w", ctx.Err())
 		}
-		return 0, err
+		return 0, drive.Item{}, err
 	}
-	return info.Size(), nil
+	return info.Size(), item, nil
 }
 
 // progressReader wraps a reader and prints a single rewritten line of upload

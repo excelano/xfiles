@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -63,5 +66,34 @@ func TestVersionNamesTheTool(t *testing.T) {
 func TestUnknownFlagIsABadInvocation(t *testing.T) {
 	if code, _ := runCLI(t, "--no-such-flag"); code != 2 {
 		t.Errorf("exit = %d, want 2", code)
+	}
+}
+
+// Under go test stdin is not a terminal, which is the unattended case: --delete
+// without --yes must refuse before any sign-in or network call.
+func TestUnattendedDeleteNeedsYes(t *testing.T) {
+	code, _ := runCLI(t, "--delete", "./local", "https://contoso.sharepoint.com/sites/Marketing")
+	if code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+}
+
+func TestDeleteConsent(t *testing.T) {
+	cases := []struct {
+		name                       string
+		doDelete, dryRun, yes, tty bool
+		refuse                     bool
+	}{
+		{"no delete", false, false, false, false, false},
+		{"unattended delete", true, false, false, false, true},
+		{"unattended delete with yes", true, false, true, false, false},
+		{"unattended dry run", true, true, false, false, false},
+		{"terminal delete asks", true, false, false, true, false},
+	}
+	for _, c := range cases {
+		err := deleteConsent(c.doDelete, c.dryRun, c.yes, c.tty)
+		if (err != nil) != c.refuse {
+			t.Errorf("%s: err = %v, want refuse = %v", c.name, err, c.refuse)
+		}
 	}
 }

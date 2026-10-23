@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Command xcp is the scp-style companion to xftp: a one-shot, non-interactive
 // copy between the local filesystem and a SharePoint document library over
 // Microsoft Graph. Exactly one of the two arguments is a SharePoint URL, and
@@ -128,6 +131,8 @@ func run() int {
 		fmt.Fprintln(w, "a - source uploads from stdin (the URL must then name the target file).")
 		fmt.Fprintln(w, "  xcp https://contoso.sharepoint.com/.../Q1.xlsx -   | xsv stats")
 		fmt.Fprintln(w, "  generate-report | xcp - https://contoso.sharepoint.com/.../report.csv")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "An upload prints the file's browser URL on stdout; progress and status go to stderr.")
 		fmt.Fprintln(w)
 		fs.PrintDefaults()
 		fmt.Fprintln(w)

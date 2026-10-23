@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Command xsync is the rsync-style companion to xftp: a one-shot recursive mirror
 // between a local directory tree and a SharePoint document-library folder over
 // Microsoft Graph. Exactly one of the two arguments is a SharePoint URL, and its
@@ -14,8 +17,9 @@
 // source again (see differs in sync.go). --ignore-times forces the transfer of
 // everything when a local edit left the mtime untouched, and
 // --itemize-changes/-i prints why each file is being sent. --delete removes
-// destination items missing from the source (mirroring proper); --dry-run/-n
-// previews the whole plan and changes nothing. Authentication is device-code;
+// destination items missing from the source (mirroring proper), asking first in
+// a terminal and requiring --yes without one; --dry-run/-n previews the whole
+// plan and changes nothing. Authentication is device-code;
 // the refresh token is cached at ~/.config/excelano/sp-token.json, shared with
 // xql and the other xfiles tools.
 package main
@@ -98,6 +102,8 @@ func run() int {
 	dryRun := fs.Bool("dry-run", false, "show what would change without transferring or deleting anything")
 	fs.BoolVar(dryRun, "n", false, "show what would change without transferring or deleting anything (shorthand)")
 	doDelete := fs.Bool("delete", false, "delete destination items that no longer exist in the source (true mirror)")
+	yes := fs.Bool("yes", false, "apply --delete without asking; required when stdin is not a terminal")
+	fs.BoolVar(yes, "y", false, "apply --delete without asking (shorthand)")
 	ignoreTimes := fs.Bool("ignore-times", false, "transfer every file, skipping the modification-time comparison")
 	fs.BoolVar(ignoreTimes, "I", false, "transfer every file, skipping the modification-time comparison (shorthand)")
 	itemize := fs.Bool("itemize-changes", false, "print why each file is being transferred (new, time, content, forced)")
@@ -108,7 +114,7 @@ func run() int {
 	uninstallSkill := fs.Bool("uninstall-skill", false, "remove the installed Claude Code skill and exit")
 	usage := func(w io.Writer) {
 		fs.SetOutput(w)
-		fmt.Fprintln(w, "Usage: xsync [--library <name>] [--delete] [--dry-run] [--itemize-changes] <src> <dst>")
+		fmt.Fprintln(w, "Usage: xsync [--library <name>] [--delete [--yes]] [--dry-run] [--itemize-changes] <src> <dst>")
 		fmt.Fprintln(w, "       xsync auth [--json]")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Recursively mirror a directory tree between the local filesystem and a")
@@ -121,6 +127,8 @@ func run() int {
 		fmt.Fprintln(w, "Add --delete to remove destination items missing from the source, --dry-run")
 		fmt.Fprintln(w, "to preview, and --itemize-changes to see why each file was picked. Use")
 		fmt.Fprintln(w, "--ignore-times to force a transfer when an edit left the mtime untouched.")
+		fmt.Fprintln(w, "--delete asks before deleting; with no terminal to ask on, it refuses")
+		fmt.Fprintln(w, "(exit 2) unless --yes is given.")
 		fmt.Fprintln(w)
 		fs.PrintDefaults()
 		fmt.Fprintln(w)
@@ -175,6 +183,10 @@ func run() int {
 		fs.Usage()
 		return 2
 	}
+	if err := deleteConsent(*doDelete, *dryRun, *yes, stdinIsTTY()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 2
+	}
 
 	ctx := context.Background()
 	tctx, stop := signal.NotifyContext(ctx, os.Interrupt)
@@ -199,5 +211,15 @@ func run() int {
 	} else {
 		url, localDir = src, dst
 	}
-	return runSync(tctx, graph, dir, localDir, url, *library, *dryRun, *doDelete, *ignoreTimes, *itemize)
+	return runSync(tctx, graph, dir, localDir, url, *library, *dryRun, *doDelete, *yes, *ignoreTimes, *itemize)
+}
+
+// deleteConsent refuses an unattended --delete that has no --yes. It is decided
+// from the command line alone, before sign-in, so the same invocation passes or
+// fails every time rather than only on the runs whose plan happens to delete.
+func deleteConsent(doDelete, dryRun, yes, tty bool) error {
+	if doDelete && !dryRun && !yes && !tty {
+		return fmt.Errorf("--delete needs --yes when stdin is not a terminal; preview the plan with --dry-run first")
+	}
+	return nil
 }

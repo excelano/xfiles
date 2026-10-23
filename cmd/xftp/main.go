@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Command xftp gives SharePoint document libraries an FTP-client feel over
 // Microsoft Graph: connect to a site, then an interactive prompt offers
 // ls/cd/get/put/mkdir/rm/mv. Authentication is device-code; the refresh token
@@ -59,6 +62,9 @@ func run() int {
 		fmt.Fprintln(w, "<url> is a SharePoint site, library, or folder URL, e.g.")
 		fmt.Fprintln(w, "  https://contoso.sharepoint.com/sites/Marketing")
 		fmt.Fprintln(w, "  https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Commands can be piped on stdin, one per line. With no terminal, rm of a")
+		fmt.Fprintln(w, "folder refuses unless given as rm -r, and xftp exits 1 if any command failed.")
 		fmt.Fprintln(w)
 		fs.PrintDefaults()
 		fmt.Fprintln(w)

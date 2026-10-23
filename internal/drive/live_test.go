@@ -1,5 +1,8 @@
 //go:build live
 
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package drive
 
 // Live tests run against a real library through the shared token cache. They
@@ -74,8 +77,12 @@ func TestLiveFileLifecycle(t *testing.T) {
 	}
 
 	small := []byte("xfiles live probe\n")
-	if err := d.Upload(ctx, g, folder+"/small.txt", "text/plain", bytes.NewReader(small), int64(len(small))); err != nil {
+	put, err := d.Upload(ctx, g, folder+"/small.txt", "text/plain", bytes.NewReader(small), int64(len(small)))
+	if err != nil {
 		t.Fatalf("Upload (single PUT): %v", err)
+	}
+	if put.WebURL == "" {
+		t.Error("Upload (single PUT) returned no webUrl")
 	}
 
 	// The session path is only taken above simpleUploadMax on a real Upload;
@@ -84,8 +91,13 @@ func TestLiveFileLifecycle(t *testing.T) {
 	if _, err := rand.Read(large); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.uploadSession(ctx, g, folder+"/large.bin", bytes.NewReader(large), int64(len(large))); err != nil {
+	body, err := d.uploadSession(ctx, g, folder+"/large.bin", bytes.NewReader(large), int64(len(large)))
+	if err != nil {
 		t.Fatalf("upload session: %v", err)
+	}
+	var finished driveItemJSON
+	if err := json.Unmarshal(body, &finished); err != nil || finished.WebURL == "" {
+		t.Errorf("upload session's final chunk carried no webUrl (err %v)", err)
 	}
 
 	items, err := d.List(ctx, g, folder)
@@ -151,7 +163,7 @@ func TestLiveWalk(t *testing.T) {
 		}
 	}
 	for _, p := range []string{folder + "/top.txt", folder + "/a/b/deep.txt"} {
-		if err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader([]byte("x")), 1); err != nil {
+		if _, err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader([]byte("x")), 1); err != nil {
 			t.Fatal(err)
 		}
 	}

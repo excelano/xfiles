@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -133,10 +136,10 @@ func hasAncestorIn(rel string, set map[string]bool) bool {
 	return false
 }
 
-// runSync binds the library, scans both trees, plans the changes, and (after a
-// confirmation when deletions are involved) applies them. It returns a process
-// exit code.
-func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir, url, library string, dryRun, doDelete, ignoreTimes, itemize bool) int {
+// runSync binds the library, scans both trees, plans the changes, and applies
+// them, asking first when deletions are involved unless yes is set. It returns a
+// process exit code.
+func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir, url, library string, dryRun, doDelete, yes, ignoreTimes, itemize bool) int {
 	d, err := drive.ResolveDrive(ctx, g, url, library)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind library: %v\n", err)
@@ -190,10 +193,9 @@ func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir
 		return boolToCode(len(conflicts) > 0)
 	}
 
-	// Deletions are the one irreversible step; gate them behind a confirmation on
-	// an interactive terminal. Non-interactive runs (scripts, pipes) proceed, the
-	// way rsync --delete does, since there's no one to ask.
-	if len(deletes) > 0 && stdinIsTTY() {
+	// Deletions are the one irreversible step. Without --yes, deleteConsent has
+	// already ensured there is a terminal to ask on.
+	if len(deletes) > 0 && !yes {
 		if !confirm(fmt.Sprintf("Delete %d destination item(s) not in the source? [y/N] ", len(deletes))) {
 			fmt.Fprintln(os.Stderr, "Skipping deletions.")
 			deletes = nil
@@ -577,7 +579,7 @@ func applyCopy(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir d
 	localPath := filepath.Join(localRoot, filepath.FromSlash(o.rel))
 	remotePath := path.Join(remoteRoot, o.rel)
 	if dir == upload {
-		if _, err := xfer.Upload(ctx, g, d, localPath, remotePath); err != nil {
+		if _, _, err := xfer.Upload(ctx, g, d, localPath, remotePath); err != nil {
 			return err
 		}
 		// Stamp the remote copy with the source mtime so the next run sees them as

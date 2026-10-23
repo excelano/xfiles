@@ -1,8 +1,12 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Command xfind is the find(1) of the xftp family: it walks a SharePoint
 // document library recursively and prints the paths it finds, optionally
 // filtered by name, type, or depth. It is the read-only, recursive cousin of
 // xftp's "ls" — point it at a site, library, or folder URL and it lists
-// everything beneath, one library-relative path per line, ready to pipe.
+// everything beneath, one library-relative path per line, ready to pipe, or
+// with --url each item's browser URL instead.
 // Authentication is device-code; the refresh token is cached at
 // ~/.config/excelano/sp-token.json, shared with xql and the other xfiles tools.
 package main
@@ -103,6 +107,7 @@ func run() int {
 	iname := fs.String("iname", "", "Like --name, but case-insensitive")
 	typ := fs.String("type", "", "Print only files (f) or only folders (d)")
 	maxDepth := fs.Int("maxdepth", 0, "Descend at most this many folder levels (0 = unlimited)")
+	printURL := fs.Bool("url", false, "Print each match's browser URL instead of its path")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
 	installSkill := fs.Bool("install-skill", false, "install the xfiles Claude Code skill and exit")
@@ -116,6 +121,9 @@ func run() int {
 		fmt.Fprintln(w, "relative to the folder the URL points at:")
 		fmt.Fprintln(w, "  xfind https://contoso.sharepoint.com/sites/Marketing")
 		fmt.Fprintln(w, "  xfind --name '*.xlsx' --type f https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Matching is by name, walking the folders beneath the URL; xfind does not")
+		fmt.Fprintln(w, "search file contents or metadata.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Wrap a SharePoint \"Copy link\" URL in single quotes; its ? and & characters")
 		fmt.Fprintln(w, "would otherwise be acted on by the shell before xfind sees them.")
@@ -215,6 +223,8 @@ func run() int {
 	walkErr := d.Walk(tctx, g, root, c.typ == "d", func(it drive.Item, p string, depth int, _ bool) bool {
 		if ok, err := c.match(it); err != nil {
 			matchErr = err
+		} else if ok && *printURL {
+			fmt.Fprintln(out, it.WebURL)
 		} else if ok {
 			fmt.Fprintln(out, relTo(root, p))
 		}

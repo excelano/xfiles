@@ -19,27 +19,31 @@ import (
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/xfer"
 	"github.com/peterh/liner"
+	"golang.org/x/term"
 )
 
 // session holds the mutable state of one interactive xftp run: the bound drive,
 // the remote working directory (library-relative; "" is the root), and the
-// local working directory used by get/put.
+// local working directory used by get/put. tty records whether stdin is a
+// terminal, and failed whether any command has reported an error.
 type session struct {
 	ctx      context.Context
 	g        *spauth.GraphClient
 	d        *drive.Drive
 	cwd      string
 	localDir string
+	tty      bool
+	failed   bool
 }
 
 // runREPL drives the FTP-style command loop until quit/EOF. It returns a
-// process exit code.
+// process exit code: 1 if any command failed, so a piped script can tell.
 func runREPL(ctx context.Context, g *spauth.GraphClient, d *drive.Drive) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = "."
 	}
-	s := &session{ctx: ctx, g: g, d: d, cwd: d.StartPath, localDir: wd}
+	s := &session{ctx: ctx, g: g, d: d, cwd: d.StartPath, localDir: wd, tty: term.IsTerminal(int(os.Stdin.Fd()))}
 
 	line := liner.NewLiner()
 	defer line.Close()
@@ -59,7 +63,7 @@ func runREPL(ctx context.Context, g *spauth.GraphClient, d *drive.Drive) int {
 		}
 		if err == io.EOF {
 			fmt.Fprintln(os.Stderr)
-			return 0
+			return s.exitCode()
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "input error: %v\n", err)
@@ -71,9 +75,22 @@ func runREPL(ctx context.Context, g *spauth.GraphClient, d *drive.Drive) int {
 		}
 		line.AppendHistory(input)
 		if quit := s.dispatch(line, args); quit {
-			return 0
+			return s.exitCode()
 		}
 	}
+}
+
+// fail reports a command's error on stderr and marks the session failed.
+func (s *session) fail(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", a...)
+	s.failed = true
+}
+
+func (s *session) exitCode() int {
+	if s.failed {
+		return 1
+	}
+	return 0
 }
 
 func saveHistory(line *liner.State, path string) {
@@ -126,7 +143,7 @@ func (s *session) dispatch(line *liner.State, args []string) bool {
 	case "lls":
 		s.lls(rest)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q; type \"help\"\n", cmd)
+		s.fail("unknown command %q; type \"help\"", cmd)
 	}
 	return false
 }
@@ -141,11 +158,11 @@ func (s *session) cd(rest []string) {
 	target := resolveRemote(s.cwd, rest[0])
 	item, err := s.d.Stat(s.ctx, s.g, target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cd: %v\n", err)
+		s.fail("cd: %v", err)
 		return
 	}
 	if !item.IsFolder {
-		fmt.Fprintf(os.Stderr, "cd: not a folder: /%s\n", target)
+		s.fail("cd: not a folder: /%s", target)
 		return
 	}
 	s.cwd = target
@@ -158,7 +175,7 @@ func (s *session) ls(rest []string) {
 	}
 	items, err := s.d.List(s.ctx, s.g, target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ls: %v\n", err)
+		s.fail("ls: %v", err)
 		return
 	}
 	printItems(os.Stdout, items)
@@ -166,7 +183,7 @@ func (s *session) ls(rest []string) {
 
 func (s *session) get(rest []string) {
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: get <remote> [local]")
+		s.fail("usage: get <remote> [local]")
 		return
 	}
 	remote := resolveRemote(s.cwd, rest[0])
@@ -183,7 +200,7 @@ func (s *session) get(rest []string) {
 	defer stop()
 
 	if err := xfer.Download(ctx, s.g, s.d, remote, localPath); err != nil {
-		fmt.Fprintf(os.Stderr, "get: %v\n", err)
+		s.fail("get: %v", err)
 		return
 	}
 	fmt.Printf("got /%s -> %s\n", remote, localPath)
@@ -191,7 +208,7 @@ func (s *session) get(rest []string) {
 
 func (s *session) put(rest []string) {
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: put <local> [remote]")
+		s.fail("usage: put <local> [remote]")
 		return
 	}
 	localPath := rest[0]
@@ -207,9 +224,9 @@ func (s *session) put(rest []string) {
 	ctx, stop := signal.NotifyContext(s.ctx, os.Interrupt)
 	defer stop()
 
-	n, err := xfer.Upload(ctx, s.g, s.d, localPath, remote)
+	n, _, err := xfer.Upload(ctx, s.g, s.d, localPath, remote)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "put: %v\n", err)
+		s.fail("put: %v", err)
 		return
 	}
 	fmt.Printf("put %s -> /%s (%d bytes)\n", localPath, remote, n)
@@ -217,31 +234,40 @@ func (s *session) put(rest []string) {
 
 func (s *session) mkdir(rest []string) {
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: mkdir <path>")
+		s.fail("usage: mkdir <path>")
 		return
 	}
 	target := resolveRemote(s.cwd, rest[0])
 	if err := s.d.Mkdir(s.ctx, s.g, target); err != nil {
-		fmt.Fprintf(os.Stderr, "mkdir: %v\n", err)
+		s.fail("mkdir: %v", err)
 		return
 	}
 	fmt.Printf("created /%s\n", target)
 }
 
-// rm deletes a file immediately; folder deletes are recursive, so they prompt
-// for confirmation first.
+// rm deletes a file immediately. A folder delete is recursive, so without -r it
+// asks first, and with no terminal to ask on it refuses: a piped confirmation
+// would be answered by whatever line of the script came next.
 func (s *session) rm(line *liner.State, rest []string) {
+	recursive := len(rest) > 0 && rest[0] == "-r"
+	if recursive {
+		rest = rest[1:]
+	}
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: rm <path>")
+		s.fail("usage: rm [-r] <path>")
 		return
 	}
 	target := resolveRemote(s.cwd, rest[0])
 	item, err := s.d.Stat(s.ctx, s.g, target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rm: %v\n", err)
+		s.fail("rm: %v", err)
 		return
 	}
-	if item.IsFolder {
+	if item.IsFolder && !recursive {
+		if !s.tty {
+			s.fail("rm: /%s is a folder; use rm -r to delete it without a terminal", target)
+			return
+		}
 		msg := fmt.Sprintf("rm: /%s is a folder with %d item(s); delete recursively? [y/N]: ", target, item.ChildCount)
 		if !confirm(line, msg) {
 			fmt.Println("cancelled")
@@ -249,7 +275,7 @@ func (s *session) rm(line *liner.State, rest []string) {
 		}
 	}
 	if err := s.d.Remove(s.ctx, s.g, target); err != nil {
-		fmt.Fprintf(os.Stderr, "rm: %v\n", err)
+		s.fail("rm: %v", err)
 		return
 	}
 	fmt.Printf("removed /%s\n", target)
@@ -257,13 +283,13 @@ func (s *session) rm(line *liner.State, rest []string) {
 
 func (s *session) mv(rest []string) {
 	if len(rest) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: mv <src> <dst>")
+		s.fail("usage: mv <src> <dst>")
 		return
 	}
 	src := resolveRemote(s.cwd, rest[0])
 	dst := resolveRemote(s.cwd, rest[1])
 	if err := s.d.Move(s.ctx, s.g, src, dst); err != nil {
-		fmt.Fprintf(os.Stderr, "mv: %v\n", err)
+		s.fail("mv: %v", err)
 		return
 	}
 	fmt.Printf("moved /%s -> /%s\n", src, dst)
@@ -282,11 +308,11 @@ func (s *session) lcd(rest []string) {
 	}
 	info, err := os.Stat(target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "lcd: %v\n", err)
+		s.fail("lcd: %v", err)
 		return
 	}
 	if !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "lcd: not a directory: %s\n", target)
+		s.fail("lcd: not a directory: %s", target)
 		return
 	}
 	s.localDir = target
@@ -304,7 +330,7 @@ func (s *session) lls(rest []string) {
 	}
 	entries, err := os.ReadDir(target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "lls: %v\n", err)
+		s.fail("lls: %v", err)
 		return
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
@@ -361,7 +387,7 @@ func printHelp() {
   get <remote> [local] download a file
   put <local> [remote] upload a file (chunked above 250MB)
   mkdir <path>         create a remote folder
-  rm <path>            delete a file (folders prompt to confirm)
+  rm [-r] <path>       delete a file; a folder asks first unless -r
   mv <src> <dst>       move or rename a remote item
   lcd [dir]            change local folder (bare: print current)
   lpwd                 print local folder

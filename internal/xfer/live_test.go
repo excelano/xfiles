@@ -1,5 +1,8 @@
 //go:build live
 
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package xfer
 
 // Live test for the local-file transfers xcp and xsync are built on. Needs
@@ -54,9 +57,12 @@ func TestLiveUploadThenDownload(t *testing.T) {
 	if err := os.WriteFile(local, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	n, err := Upload(ctx, g, d, local, folder+"/probe.txt")
+	n, item, err := Upload(ctx, g, d, local, folder+"/probe.txt")
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
+	}
+	if item.WebURL == "" {
+		t.Error("Upload returned no webUrl")
 	}
 	if n != int64(len(content)) {
 		t.Errorf("Upload reported %d bytes, want %d", n, len(content))

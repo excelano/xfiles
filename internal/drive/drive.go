@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Package drive is xftp's SharePoint document-library client: it resolves a
 // SharePoint URL to a Graph drive, then exposes FTP-shaped operations over that
 // drive — Stat, List, Download, Upload, Mkdir, Remove, Move. The URL may name
@@ -54,6 +57,8 @@ type Item struct {
 	// has not yet computed. xsync uses it to settle a size-equal/mtime-diverged
 	// comparison by content instead of re-transferring on a timestamp alone.
 	QuickXorHash string
+	// WebURL opens the item in the browser.
+	WebURL string
 }
 
 // parseSiteURL splits a SharePoint URL into its hostname, server-relative site
@@ -360,10 +365,11 @@ type driveItemJSON struct {
 	FileSystemInfo *struct {
 		LastModifiedDateTime string `json:"lastModifiedDateTime"`
 	} `json:"fileSystemInfo"`
+	WebURL string `json:"webUrl"`
 }
 
 func (j driveItemJSON) toItem() Item {
-	it := Item{ID: j.ID, Name: j.Name, Size: j.Size}
+	it := Item{ID: j.ID, Name: j.Name, Size: j.Size, WebURL: j.WebURL}
 	if j.Folder != nil {
 		it.IsFolder = true
 		it.ChildCount = j.Folder.ChildCount
@@ -388,7 +394,7 @@ func (j driveItemJSON) toItem() Item {
 func (d *Drive) List(ctx context.Context, g *spauth.GraphClient, path string) ([]Item, error) {
 	endpoint := fmt.Sprintf("/drives/%s%s/children", d.DriveID, itemRef(path))
 	raws, err := g.GetAll(ctx, endpoint, url.Values{
-		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo"},
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl"},
 	})
 	if err != nil {
 		return nil, err
@@ -477,7 +483,7 @@ const uploadChunkSize = 10 * 1024 * 1024
 // "/" for the drive root). Used to validate "cd" targets and to size downloads.
 func (d *Drive) Stat(ctx context.Context, g *spauth.GraphClient, path string) (Item, error) {
 	body, err := g.Get(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(path)), url.Values{
-		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo"},
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl"},
 	})
 	if err != nil {
 		return Item{}, err
@@ -506,25 +512,39 @@ func (d *Drive) Download(ctx context.Context, g *spauth.GraphClient, path string
 // Upload streams size bytes from r to the library-relative remote path. (FTP
 // "put".) Files at or below SimpleUploadMax go in a single PUT; larger files use
 // a chunked, resumable upload session. An existing file at the path is replaced.
-func (d *Drive) Upload(ctx context.Context, g *spauth.GraphClient, path, contentType string, r io.Reader, size int64) error {
+// It returns the stored item as Graph reports it once the upload completes.
+func (d *Drive) Upload(ctx context.Context, g *spauth.GraphClient, path, contentType string, r io.Reader, size int64) (Item, error) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	var body []byte
 	if size <= simpleUploadMax {
 		data, err := io.ReadAll(r)
 		if err != nil {
-			return fmt.Errorf("reading upload data: %w", err)
+			return Item{}, fmt.Errorf("reading upload data: %w", err)
 		}
-		_, err = g.PutRaw(ctx, fmt.Sprintf("/drives/%s%s/content", d.DriveID, itemRef(path)), contentType, data)
-		return err
+		body, err = g.PutRaw(ctx, fmt.Sprintf("/drives/%s%s/content", d.DriveID, itemRef(path)), contentType, data)
+		if err != nil {
+			return Item{}, err
+		}
+	} else {
+		var err error
+		if body, err = d.uploadSession(ctx, g, path, r, size); err != nil {
+			return Item{}, err
+		}
 	}
-	return d.uploadSession(ctx, g, path, r, size)
+	var j driveItemJSON
+	if err := json.Unmarshal(body, &j); err != nil {
+		return Item{}, fmt.Errorf("decoding uploaded item: %w", err)
+	}
+	return j.toItem(), nil
 }
 
 // uploadSession uploads a large file in chunks. It opens a Graph upload session,
 // then streams uploadChunkSize-byte ranges from r until size bytes are sent. The
-// session is cancelled on failure so a partial upload leaves nothing behind.
-func (d *Drive) uploadSession(ctx context.Context, g *spauth.GraphClient, path string, r io.Reader, size int64) error {
+// session is cancelled on failure so a partial upload leaves nothing behind. It
+// returns the body of the final chunk's response, which is the finished item.
+func (d *Drive) uploadSession(ctx context.Context, g *spauth.GraphClient, path string, r io.Reader, size int64) ([]byte, error) {
 	body, err := g.Post(ctx, fmt.Sprintf("/drives/%s%s/createUploadSession", d.DriveID, itemRef(path)),
 		map[string]interface{}{
 			"item": map[string]interface{}{
@@ -532,16 +552,16 @@ func (d *Drive) uploadSession(ctx context.Context, g *spauth.GraphClient, path s
 			},
 		})
 	if err != nil {
-		return fmt.Errorf("creating upload session: %w", err)
+		return nil, fmt.Errorf("creating upload session: %w", err)
 	}
 	var sess struct {
 		UploadURL string `json:"uploadUrl"`
 	}
 	if err := json.Unmarshal(body, &sess); err != nil {
-		return fmt.Errorf("decoding upload session: %w", err)
+		return nil, fmt.Errorf("decoding upload session: %w", err)
 	}
 	if sess.UploadURL == "" {
-		return fmt.Errorf("upload session response missing uploadUrl")
+		return nil, fmt.Errorf("upload session response missing uploadUrl")
 	}
 
 	// Cancel the session on any failure using a fresh context, so cleanup still
@@ -554,26 +574,29 @@ func (d *Drive) uploadSession(ctx context.Context, g *spauth.GraphClient, path s
 
 	buf := make([]byte, uploadChunkSize)
 	var sent int64
+	var item []byte
 	for sent < size {
 		n, readErr := io.ReadFull(r, buf)
 		if readErr != nil && readErr != io.ErrUnexpectedEOF && readErr != io.EOF {
 			cancelSession()
-			return fmt.Errorf("reading upload data: %w", readErr)
+			return nil, fmt.Errorf("reading upload data: %w", readErr)
 		}
 		if n == 0 {
 			break
 		}
-		if _, _, err := g.UploadChunk(ctx, sess.UploadURL, buf[:n], sent, size); err != nil {
+		_, chunkBody, err := g.UploadChunk(ctx, sess.UploadURL, buf[:n], sent, size)
+		if err != nil {
 			cancelSession()
-			return err
+			return nil, err
 		}
 		sent += int64(n)
+		item = chunkBody
 	}
 	if sent != size {
 		cancelSession()
-		return fmt.Errorf("upload incomplete: sent %d of %d bytes", sent, size)
+		return nil, fmt.Errorf("upload incomplete: sent %d of %d bytes", sent, size)
 	}
-	return nil
+	return item, nil
 }
 
 // SetMTime writes the filesystem last-modified time of the item at the

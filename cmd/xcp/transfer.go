@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -62,7 +65,8 @@ func runDownload(ctx context.Context, g *spauth.GraphClient, url, dst, library s
 
 // runUpload copies the local src file to the remote location named by url. The
 // remote may be a folder (upload into it), an existing file (overwrite), or a
-// new path. A src of "-" reads from stdin instead. Returns a process exit code.
+// new path. A src of "-" reads from stdin instead. The uploaded file's browser
+// URL is the one line printed on stdout. Returns a process exit code.
 func runUpload(ctx context.Context, g *spauth.GraphClient, src, url, library string) int {
 	d, err := drive.ResolveDrive(ctx, g, url, library)
 	if err != nil {
@@ -99,12 +103,13 @@ func runUpload(ctx context.Context, g *spauth.GraphClient, src, url, library str
 
 	tctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
-	n, err := xfer.Upload(tctx, g, d, localPath, remote)
+	n, item, err := xfer.Upload(tctx, g, d, localPath, remote)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "upload failed: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(os.Stderr, "%s -> %s (%d bytes)\n", src, url, n)
+	fmt.Println(item.WebURL)
 	return 0
 }
 
@@ -142,11 +147,12 @@ func uploadStdin(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, url
 
 	tctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
-	n, err := xfer.Upload(tctx, g, d, tmpName, remote)
+	n, item, err := xfer.Upload(tctx, g, d, tmpName, remote)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "upload failed: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(os.Stderr, "stdin -> %s (%d bytes)\n", url, n)
+	fmt.Println(item.WebURL)
 	return 0
 }
