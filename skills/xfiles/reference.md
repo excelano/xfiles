@@ -1,6 +1,6 @@
 # xfiles reference
 
-Complete reference for the five `xfiles` CLIs. Load this when `SKILL.md` isn't
+Complete reference for the `xfiles` commands. Load this when `SKILL.md` isn't
 specific enough — per-tool flags, the `xftp` session command set, transfer and
 large-file behavior, auth/consent details, and token-cache locations.
 
@@ -27,7 +27,9 @@ Exactly one of source/destination is a SharePoint URL; that side sets the direct
 | `-` as the **destination** | remote file cat'd to stdout (clean byte stream for pipes) |
 | `-` as the **source** | upload from stdin — the URL must name the target file (stdin has no name) |
 
-No recursive copy — that's `xsync`.
+An upload prints the stored file's browser URL as the one line on stdout; the
+`src -> dst` status line and any progress go to stderr. No recursive copy — that's
+`xsync`.
 
 ## xftp — interactive session (ftp)
 
@@ -47,7 +49,7 @@ quoted (`"Phase 2"`, `'Phase 2'`) or escaped (`Phase\ 2`) as in a shell.
 | `get <remote> [local]` | download; local name defaults to the remote's |
 | `put <local> [remote]` | upload; remote name defaults to the local's; >250 MB chunks with progress |
 | `mkdir <path>` | create a remote folder |
-| `rm <path>` | delete a file (→ recycle bin); a **folder** is recursive and **prompts first** |
+| `rm [-r] <path>` | delete a file (→ recycle bin); a **folder** asks first, or goes straight through with `-r` |
 | `mv <src> <dst>` | move or rename a remote item |
 | `lcd [dir]` | change the local working dir for get/put; no arg prints it |
 | `lpwd` | print the local working dir |
@@ -55,8 +57,9 @@ quoted (`"Phase 2"`, `'Phase 2'`) or escaped (`Phase\ 2`) as in a shell.
 | `help` | command list |
 | `quit` | exit |
 
-Single-file `rm` goes straight through (recoverable from the recycle bin); folder `rm`
-is recursive and irreversible from xftp's side, so it confirms first..
+Commands can be piped on stdin, one per line, and xftp exits 1 if any of them failed. A
+folder `rm` is recursive; in a terminal it asks first, and with no terminal it refuses
+unless given as `rm -r`, so the answer is never read from the next line of the script.
 
 ## xsync — recursive mirror (rsync)
 
@@ -69,7 +72,8 @@ Exactly one side is a URL; that side sets direction. Only new/changed files tran
 | Flag | Meaning |
 |---|---|
 | `--dry-run`, `-n` | print the full plan, change nothing (the safe way to preview `--delete`) |
-| `--delete` | make the destination an exact mirror, removing what's gone from the source; confirms in a terminal |
+| `--delete` | make the destination an exact mirror, removing what's gone from the source; asks in a terminal, and with no terminal refuses (exit 2) unless `--yes` |
+| `--yes`, `-y` | apply `--delete` without asking |
 | `--library <NAME>` | force the library |
 | `--ignore-times`, `-I` | transfer every file, skipping the timestamp comparison |
 | `--itemize-changes`, `-i` | label each line with why it was picked: `new`, `time`, `content`, `forced` |
@@ -83,7 +87,7 @@ mtime on download so the comparison holds across runs; a browser edit moves that
 timestamp too, so remote changes are still caught. On a **same-size,
 disagreeing-timestamp** file it falls back to comparing **QuickXorHash** on both sides.
 The gap: contents changing without the mtime moving reads as unchanged — use
-`--ignore-times`. Default is add/update only; deletion requires `--delete`..
+`--ignore-times`. Default is add/update only; deletion requires `--delete`.
 
 **Case, when uploading.** SharePoint preserves case but does not distinguish by it, so
 `D1` and `d1` are one folder there. Uploads compare with case folded: a local `d1/`
@@ -107,9 +111,13 @@ it pipes into `wc`, `grep`, `xargs`, etc. Read-only.
 | `--iname <glob>` | like `--name`, case-insensitive (mutually exclusive with `--name`) |
 | `--type f` \| `--type d` | restrict to files or folders |
 | `--maxdepth <n>` | descend at most `n` folder levels (`0` = unlimited) |
+| `--url` | print each match's browser URL instead of its path |
 | `--library <NAME>` | force the library |
 
-`--type d` skips listing file entries entirely (an efficiency win, not just a filter).
+Matching is by name only: xfind walks the folders below the URL and does not search
+file contents or metadata. `--type d` skips listing file entries entirely (an efficiency
+win, not just a filter).
+
 ## xtree — indented tree (tree)
 
 ```
@@ -132,7 +140,7 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
   carries meaning for `xcp` and `xsync`, where the URL side sets the direction.
 - **`--` ends flag parsing**, which is how a local path beginning with a dash is passed.
 - **`--help`, `-h`, `--version`, `-V`** print to stdout and exit 0. The version line
-  names its tool (`xtree 0.4.0`) so a log mixing all five stays readable.
+  names its tool so a log mixing several stays readable.
 - **Exit codes:** `0` success, `1` bad input (unreachable site, missing file, incomplete
   sign-in, failed transfer), `2` bad invocation (unknown flag, wrong argument count,
   contradictory options). A walk that matches nothing is 0, not 1.

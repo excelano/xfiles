@@ -100,7 +100,7 @@ Paths may be relative to the current folder or absolute with a leading `/`, and 
 | `get <remote> [local]` | Download a file. Defaults the local name to the remote's. |
 | `put <local> [remote]` | Upload a file. Files over 250 MB upload in chunks, with progress. Defaults the remote name to the local's. |
 | `mkdir <path>` | Create a remote folder. |
-| `rm <path>` | Delete a file. Folders are recursive, so they prompt for confirmation first. |
+| `rm [-r] <path>` | Delete a file. Folders are recursive, so they prompt for confirmation first unless given `-r`. |
 | `mv <src> <dst>` | Move or rename a remote item. |
 | `lcd [dir]` | Change the local working folder for `get`/`put`. With no argument, prints it. |
 | `lpwd` | Print the local working folder. |
@@ -109,6 +109,8 @@ Paths may be relative to the current folder or absolute with a leading `/`, and 
 | `quit` | Exit. |
 
 Deleting a single file goes straight through, since SharePoint routes it to the recycle bin and it can be recovered there. Deleting a folder is recursive and irreversible from xftp's side, so it asks first.
+
+Commands can also be piped in, one per line, which is how a script or an agent drives a session: `printf 'cd Reports\nrm old.xlsx\n' | xftp <url>`. With no terminal to ask on, a plain `rm` of a folder refuses and `rm -r` is the way to delete one, so a confirmation is never answered by whatever line of the script comes next. A piped session exits 1 if any of its commands failed.
 
 ## xcp — one-shot copies
 
@@ -125,6 +127,8 @@ Download a file from a library to the current directory:
 ```
 xcp "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports/Q1 Plan.xlsx" ./
 ```
+
+After an upload, `xcp` prints the file's browser URL on stdout, the link to hand to someone who works in the web apps; status and progress go to stderr.
 
 The destination follows `scp` habits. On upload, a URL that points at a folder copies the file into it under its own name, a URL that points at an existing file overwrites it, and any other path is taken as the new name. On download, a destination that is an existing directory receives the file under its remote name, and otherwise the destination is the path to write.
 
@@ -163,18 +167,18 @@ The trade-off is that a local file whose contents change without its modificatio
 xsync --dry-run --itemize-changes ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
 ```
 
-By default xsync only adds and updates; it never deletes. Pass `--delete` to make the destination an exact mirror, removing items that no longer exist in the source — when run in a terminal it asks for confirmation first. Pass `--dry-run` (`-n`) to print the full plan and change nothing, which is the safe way to preview a `--delete`:
+By default xsync only adds and updates; it never deletes. Pass `--delete` to make the destination an exact mirror, removing items that no longer exist in the source. In a terminal it asks for confirmation first; with no terminal, as under cron or an agent, it refuses with exit 2 unless `--yes` (`-y`) is given. Pass `--dry-run` (`-n`) to print the full plan and change nothing, which is the safe way to preview a `--delete`:
 
 ```
 xsync --dry-run --delete ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
-xsync --delete ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
+xsync --delete --yes ./reports "https://contoso.sharepoint.com/sites/Marketing/Shared Documents/Reports"
 ```
 
 ## xfind and xtree — recursive listing
 
 Where `ls` shows one folder, `xfind` and `xtree` walk a whole library. Both take a single SharePoint URL — site, library, or folder — and recurse from there, the same URL shapes the other tools accept, copy links included. Both are read-only: they only ever list.
 
-`xfind` prints one path per line, relative to the folder the URL points at, the way `find` prints paths relative to its starting directory. With no flags it lists everything; `--name` (or case-insensitive `--iname`) filters by a glob on the file or folder name, `--type f` or `--type d` restricts to files or folders, and `--maxdepth` limits how deep it descends.
+`xfind` prints one path per line, relative to the folder the URL points at, the way `find` prints paths relative to its starting directory. With no flags it lists everything; `--name` (or case-insensitive `--iname`) filters by a glob on the file or folder name, `--type f` or `--type d` restricts to files or folders, and `--maxdepth` limits how deep it descends. `--url` prints each match's browser URL in place of its path. Matching is by name only; xfind does not search file contents or metadata, which is a job for SharePoint search.
 
 ```
 xfind https://contoso.sharepoint.com/sites/Marketing
@@ -207,7 +211,7 @@ Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in prog
 
 ## Use it from Claude Code
 
-xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, so told to move, find, or sync files in SharePoint they reach for a heavyweight Graph MCP or PnP PowerShell when one xfiles command does the job. The skill makes the Unix-verb mapping explicit — which tool to reach for, how a site/library/folder is addressed as a URL, the shared device-code consent, xsync's mtime-first change detection, and the hard boundary (SharePoint *list* rows and columns are `xql sp`'s job, not xfiles') — so the agent picks the right tool instead of routing around the family. Any command in the repo installs it, since the skill is compiled into each of them:
+xfiles was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xfiles/`](skills/xfiles/). Agents know `scp`, `find`, `tree`, `rsync`, and `ftp` cold but have no knowledge of the SharePoint-over-Graph analogues, and many of the SharePoint integrations an agent has can search and read but not write. The skill scopes xfiles by job: it is the tool for uploading, downloading, mirroring, and deleting, while finding a document by topic belongs to a search tool and SharePoint *list* rows and columns belong to `xql sp`. It also carries what an agent gets wrong without it: how a site, library, or folder is addressed as a URL, xsync's mtime-first change detection, the dry-run habit before a delete, and the device-code sign-in that needs a person. Any command in the repo installs it, since the skill is compiled into each of them:
 
 ```sh
 xcp --install-skill
