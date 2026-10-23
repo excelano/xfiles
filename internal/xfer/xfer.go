@@ -16,7 +16,7 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 	"github.com/excelano/xfiles/internal/drive"
 )
 
@@ -30,7 +30,7 @@ const progressThreshold = 50 * 1024 * 1024 // 50 MiB
 // never leaves a corrupt file at the real name. Progress prints to stderr for
 // files over progressThreshold. A remote folder is rejected. When the context
 // is cancelled (Ctrl-C), the returned error wraps ctx.Err().
-func Download(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remote, localPath string) error {
+func Download(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, remote, localPath string) error {
 	tmp, err := os.CreateTemp(filepath.Dir(localPath), "."+filepath.Base(localPath)+".part-*")
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func Download(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remote
 // no temp file, keeping the byte stream clean for piping (xcp's "-" destination,
 // i.e. cat to stdout). A remote folder is rejected; on ctx cancellation the
 // error wraps ctx.Err().
-func DownloadStream(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remote string, w io.Writer) error {
+func DownloadStream(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, remote string, w io.Writer) error {
 	return downloadTo(ctx, g, d, remote, w, false)
 }
 
@@ -65,7 +65,7 @@ func DownloadStream(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, 
 // the content to w. allowProgress is false for stdout so progress can't appear
 // to be part of the piped data (it would go to stderr regardless, but a cat
 // should be silent).
-func downloadTo(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remote string, w io.Writer, allowProgress bool) error {
+func downloadTo(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, remote string, w io.Writer, allowProgress bool) error {
 	item, err := d.Stat(ctx, g, remote)
 	if err != nil {
 		return err
@@ -93,7 +93,7 @@ func downloadTo(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remo
 // bytes sent and the stored item, whose size differs from the bytes sent when
 // SharePoint rewrites an Office file. A local directory is rejected. On ctx
 // cancellation the returned error wraps ctx.Err().
-func Upload(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, localPath, remote string) (int64, drive.Item, error) {
+func Upload(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, localPath, remote string) (int64, drive.Item, error) {
 	f, err := os.Open(localPath)
 	if err != nil {
 		return 0, drive.Item{}, err

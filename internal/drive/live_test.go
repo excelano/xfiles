@@ -26,26 +26,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 )
 
-func liveDrive(t *testing.T) (context.Context, *spauth.GraphClient, *Drive) {
+func liveDrive(t *testing.T) (context.Context, *graphauth.GraphClient, *Drive) {
 	t.Helper()
 	site := os.Getenv("XFILES_LIVE_SITE")
 	if site == "" {
 		t.Fatal("XFILES_LIVE_SITE is not set; point it at a SharePoint test site to run the live tests")
 	}
 	ctx := context.Background()
-	client, err := spauth.NewPublicClient(spauth.CachePath(), "")
+	client, err := graphauth.SharePoint.NewPublicClient(graphauth.SharePoint.CachePath(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := spauth.CheckStatus(ctx, client, spauth.CachePath())
+	st, err := graphauth.SharePoint.CheckStatus(ctx, client, graphauth.SharePoint.CachePath())
 	if err != nil || !st.SignedIn {
-		t.Fatalf("no usable session in %s; sign in with any Excelano SharePoint tool first (%v %s)", spauth.CachePath(), err, st.Reason)
+		t.Fatalf("no usable session in %s; sign in with any Excelano SharePoint tool first (%v %s)", graphauth.SharePoint.CachePath(), err, st.Reason)
 	}
 	accounts, _ := client.Accounts(ctx)
-	g := spauth.NewGraphClient(client, accounts[0])
+	g := graphauth.SharePoint.NewGraphClient(client, accounts[0])
 	d, err := ResolveDrive(ctx, g, site, "")
 	if err != nil {
 		t.Fatalf("resolving %s: %v", site, err)
@@ -54,7 +54,7 @@ func liveDrive(t *testing.T) (context.Context, *spauth.GraphClient, *Drive) {
 }
 
 // fixtureFolder makes a folder this test owns and schedules its removal.
-func fixtureFolder(t *testing.T, ctx context.Context, g *spauth.GraphClient, d *Drive) string {
+func fixtureFolder(t *testing.T, ctx context.Context, g *graphauth.GraphClient, d *Drive) string {
 	t.Helper()
 	folder := fmt.Sprintf("xfiles-live-%d", time.Now().UnixNano())
 	if err := d.Mkdir(ctx, g, folder); err != nil {

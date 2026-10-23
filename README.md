@@ -203,7 +203,7 @@ The suite authenticates through a multi-tenant Azure app registration ("Excelano
 
 The session is shared as well as the consent. Sign-in is device-code: the first connection prints a short code and a URL, you sign in once in a browser, and the refresh token is cached at `~/.config/excelano/sp-token.json` (under `$XDG_CONFIG_HOME` when set), one file for every xfiles command and for `xql sp`, so signing in with any of them signs in the rest. A cache left by an earlier version under `~/.config/<tool>` is adopted the first time the new version runs, so upgrading costs no sign-in. Delete the shared file to force re-authentication for the whole family. `xftp auth` (or any sibling's `auth`) reports the state of that session, with `--json` for a script, and exits 0 whether or not one exists; it never starts a sign-in, so it is the safe question to ask before unattended work.
 
-The sign-in layer lives in its own module, [spauth](https://github.com/excelano/spauth), which this repository and xql both import. To use your own app registration instead, change `defaultClientID` there and rebuild.
+The sign-in layer lives in its own module, [graphauth](https://github.com/excelano/graphauth), which this repository and xql both import. To use your own app registration instead, change the `ClientID` of `graphauth.SharePoint` there and rebuild.
 
 ## Large files and transfers
 

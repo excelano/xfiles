@@ -19,7 +19,7 @@ import (
 	"github.com/excelano/quickxorhash"
 	"golang.org/x/term"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/xfer"
 )
@@ -139,7 +139,7 @@ func hasAncestorIn(rel string, set map[string]bool) bool {
 // runSync binds the library, scans both trees, plans the changes, and applies
 // them, asking first when deletions are involved unless yes is set. It returns a
 // process exit code.
-func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir, url, library string, dryRun, doDelete, yes, ignoreTimes, itemize bool) int {
+func runSync(ctx context.Context, g *graphauth.GraphClient, dir direction, localDir, url, library string, dryRun, doDelete, yes, ignoreTimes, itemize bool) int {
 	d, err := drive.ResolveDrive(ctx, g, url, library)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind library: %v\n", err)
@@ -213,7 +213,7 @@ func runSync(ctx context.Context, g *spauth.GraphClient, dir direction, localDir
 // the remote root folder exists (creating it, and any ancestors, unless this is
 // a dry run); for a download it requires the remote folder to exist and creates
 // the local root.
-func scanTrees(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localDir, remoteRoot string, dryRun bool) (source, dest map[string]fileEntry, err error) {
+func scanTrees(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir direction, localDir, remoteRoot string, dryRun bool) (source, dest map[string]fileEntry, err error) {
 	if dir == upload {
 		info, serr := os.Stat(localDir)
 		if serr != nil {
@@ -270,7 +270,7 @@ func scanTrees(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir d
 // root folder exists first. A root that isn't there yet means an empty remote
 // tree (everything will be created); on a real run its folders are created up
 // front so later path-addressed uploads have a parent.
-func scanRemoteRoot(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, remoteRoot string, dryRun bool) (map[string]fileEntry, error) {
+func scanRemoteRoot(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, remoteRoot string, dryRun bool) (map[string]fileEntry, error) {
 	if remoteRoot != "" {
 		it, err := d.Stat(ctx, g, remoteRoot)
 		if err != nil {
@@ -291,7 +291,7 @@ func scanRemoteRoot(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, 
 // ensureRemoteDir creates each missing segment of a library-relative folder
 // path, parent before child, so a deep destination root can be materialised in
 // one shot.
-func ensureRemoteDir(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir string) error {
+func ensureRemoteDir(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir string) error {
 	segs := strings.Split(strings.Trim(dir, "/"), "/")
 	cur := ""
 	for _, s := range segs {
@@ -340,7 +340,7 @@ func scanLocal(root string) (map[string]fileEntry, error) {
 // scanRemote walks a SharePoint folder tree into a relative-path map, recording
 // size, the writable fileSystemInfo mtime, and the QuickXorHash used as a
 // content-level tiebreaker when the mtime alone is inconclusive.
-func scanRemote(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, root string) (map[string]fileEntry, error) {
+func scanRemote(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, root string) (map[string]fileEntry, error) {
 	m := map[string]fileEntry{}
 	err := d.Walk(ctx, g, root, 0, false, func(it drive.Item, p string, _ int, _ bool) bool {
 		rel := relTo(root, p)
@@ -537,7 +537,7 @@ type result struct {
 // execute applies the planned changes against the destination side and returns
 // the tally of what succeeded and failed. Per-item failures are reported and the
 // run continues, the way rsync soldiers on past a single bad file.
-func execute(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, mkdirs, copies, deletes []op) result {
+func execute(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, mkdirs, copies, deletes []op) result {
 	var r result
 	for _, o := range mkdirs {
 		if err := applyMkdir(ctx, g, d, dir, localRoot, remoteRoot, o); err != nil {
@@ -566,7 +566,7 @@ func execute(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir dir
 	return r
 }
 
-func applyMkdir(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
+func applyMkdir(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
 	if dir == upload {
 		// The folder existing is the end state a mirror wants, so an already-there
 		// folder is not an error the way it is for an interactive xftp mkdir.
@@ -575,7 +575,7 @@ func applyMkdir(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir 
 	return os.MkdirAll(filepath.Join(localRoot, filepath.FromSlash(o.rel)), 0o755)
 }
 
-func applyCopy(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
+func applyCopy(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
 	localPath := filepath.Join(localRoot, filepath.FromSlash(o.rel))
 	remotePath := path.Join(remoteRoot, o.rel)
 	if dir == upload {
@@ -608,7 +608,7 @@ func applyCopy(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir d
 // side always carries one). A match is already in sync; on a real run it re-stamps
 // the mtime on the side that drifted so the next run hits the cheap fast path. A
 // mismatch — or a remote item with no hash computed yet — is returned as a copy.
-func resolveVerify(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, verify []op, remote map[string]fileEntry, dryRun bool) (copies []op, verified int) {
+func resolveVerify(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, verify []op, remote map[string]fileEntry, dryRun bool) (copies []op, verified int) {
 	for _, o := range verify {
 		localPath := filepath.Join(localRoot, filepath.FromSlash(o.rel))
 		want := remote[o.rel].hash
@@ -654,7 +654,7 @@ func localQuickXor(name string) (string, error) {
 	return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
 }
 
-func applyDelete(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
+func applyDelete(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, dir direction, localRoot, remoteRoot string, o op) error {
 	if dir == upload {
 		return d.Remove(ctx, g, path.Join(remoteRoot, o.rel))
 	}

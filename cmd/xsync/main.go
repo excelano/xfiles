@@ -34,7 +34,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 	"github.com/excelano/xfiles"
 	"github.com/excelano/xfiles/internal/buildinfo"
 	"github.com/excelano/xfiles/internal/cli"
@@ -133,7 +133,7 @@ func run() int {
 		fs.PrintDefaults()
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Authentication is device-code via Microsoft Graph; refresh tokens are")
-		fmt.Fprintln(w, "cached at "+spauth.CachePath()+", one session shared with xql and the other xfiles tools.")
+		fmt.Fprintln(w, "cached at "+graphauth.SharePoint.CachePath()+", one session shared with xql and the other xfiles tools.")
 		fmt.Fprintln(w, "`xsync auth` reports that session without starting a sign-in.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, cli.ExitCodes)
@@ -143,7 +143,7 @@ func run() int {
 	// The bare state command binds no library and needs no URL, so it is
 	// answered before the main flag set sees the line.
 	if len(args) > 0 && args[0] == "auth" {
-		return spauth.AuthCommand(context.Background(), "xsync", legacyTokenCache(), args[1:], os.Stdout, os.Stderr)
+		return graphauth.SharePoint.AuthCommand(context.Background(), "xsync", legacyTokenCache(), args[1:], os.Stdout, os.Stderr)
 	}
 	if cli.HelpRequested(args, fs) {
 		usage(os.Stdout)
@@ -192,17 +192,17 @@ func run() int {
 	tctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
-	client, err := spauth.NewPublicClient(spauth.CachePath(), legacyTokenCache())
+	client, err := graphauth.SharePoint.NewPublicClient(graphauth.SharePoint.CachePath(), legacyTokenCache())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Setup error: %v\n", err)
 		return 1
 	}
-	result, err := spauth.Authenticate(tctx, client)
+	result, err := graphauth.SharePoint.Authenticate(tctx, client)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Authentication failed: %v%s\n", err, spauth.HintForAuthError(err))
+		fmt.Fprintf(os.Stderr, "Authentication failed: %v%s\n", err, graphauth.HintForAuthError(err))
 		return 1
 	}
-	graph := spauth.NewGraphClient(client, result.Account)
+	graph := graphauth.SharePoint.NewGraphClient(client, result.Account)
 	fmt.Fprintf(os.Stderr, "Authenticated as: %s\n", result.Account.PreferredUsername)
 
 	var localDir, url string

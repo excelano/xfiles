@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 )
 
 // Drive is a resolved SharePoint document library the session operates on.
@@ -101,7 +101,7 @@ func parseSiteURL(rawURL string) (hostname, sitePath, restPath string, err error
 // that points below the site is matched to a library by webUrl (with any folder
 // remainder kept as the starting path); otherwise the site's default document
 // library ("Documents"/"Shared Documents") is bound.
-func ResolveDrive(ctx context.Context, g *spauth.GraphClient, siteURL, library string) (*Drive, error) {
+func ResolveDrive(ctx context.Context, g *graphauth.GraphClient, siteURL, library string) (*Drive, error) {
 	hostname, sitePath, restPath, err := parseSiteURL(siteURL)
 	if err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func ResolveDrive(ctx context.Context, g *spauth.GraphClient, siteURL, library s
 }
 
 // resolveSiteID mirrors xql's resolveSiteID: GET /sites/{host}:{path}.
-func resolveSiteID(ctx context.Context, g *spauth.GraphClient, hostname, sitePath string) (string, error) {
+func resolveSiteID(ctx context.Context, g *graphauth.GraphClient, hostname, sitePath string) (string, error) {
 	var path string
 	if sitePath == "" {
 		path = fmt.Sprintf("/sites/%s", hostname)
@@ -161,7 +161,7 @@ func resolveSiteID(ctx context.Context, g *spauth.GraphClient, hostname, sitePat
 }
 
 // resolveDefaultDrive binds the site's default document library.
-func resolveDefaultDrive(ctx context.Context, g *spauth.GraphClient, siteID string) (id, name string, err error) {
+func resolveDefaultDrive(ctx context.Context, g *graphauth.GraphClient, siteID string) (id, name string, err error) {
 	body, err := g.Get(ctx, fmt.Sprintf("/sites/%s/drive", siteID), nil)
 	if err != nil {
 		return "", "", err
@@ -185,7 +185,7 @@ type driveMeta struct {
 
 // listDrives returns every document library on the site, with the webUrl needed
 // to match one against a deep-linked URL.
-func listDrives(ctx context.Context, g *spauth.GraphClient, siteID string) ([]driveMeta, error) {
+func listDrives(ctx context.Context, g *graphauth.GraphClient, siteID string) ([]driveMeta, error) {
 	raws, err := g.GetAll(ctx, fmt.Sprintf("/sites/%s/drives", siteID), url.Values{
 		"$select": {"id,name,webUrl"},
 	})
@@ -204,7 +204,7 @@ func listDrives(ctx context.Context, g *spauth.GraphClient, siteID string) ([]dr
 }
 
 // resolveDriveByName matches a library by display name (case-insensitive).
-func resolveDriveByName(ctx context.Context, g *spauth.GraphClient, siteID, library string) (id, name string, err error) {
+func resolveDriveByName(ctx context.Context, g *graphauth.GraphClient, siteID, library string) (id, name string, err error) {
 	drives, err := listDrives(ctx, g, siteID)
 	if err != nil {
 		return "", "", err
@@ -222,7 +222,7 @@ func resolveDriveByName(ctx context.Context, g *spauth.GraphClient, siteID, libr
 // resolveDriveFromURL matches the library whose webUrl the URL points into and
 // returns the folder remainder as the starting path. When no library matches
 // (an unusual URL shape), it falls back to the site's default library.
-func resolveDriveFromURL(ctx context.Context, g *spauth.GraphClient, siteID, rawURL string) (id, name, startPath string, err error) {
+func resolveDriveFromURL(ctx context.Context, g *graphauth.GraphClient, siteID, rawURL string) (id, name, startPath string, err error) {
 	drives, err := listDrives(ctx, g, siteID)
 	if err != nil {
 		return "", "", "", err
@@ -392,7 +392,7 @@ func (j driveItemJSON) toItem() Item {
 
 // List returns the children of a library-relative folder path ("" or "/" for
 // the library root). This is the read primitive behind an FTP "ls".
-func (d *Drive) List(ctx context.Context, g *spauth.GraphClient, path string) ([]Item, error) {
+func (d *Drive) List(ctx context.Context, g *graphauth.GraphClient, path string) ([]Item, error) {
 	endpoint := fmt.Sprintf("/drives/%s%s/children", d.DriveID, itemRef(path))
 	raws, err := g.GetAll(ctx, endpoint, url.Values{
 		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl"},
@@ -441,7 +441,7 @@ func SortChildren(items []Item) {
 // so isLast reflects the last *folder* in a directory rather than the last item.
 // A tree drawn from a folders-only walk would otherwise mark the last subfolder
 // with ├── whenever a file sorts after it but goes unshown.
-func (d *Drive) Walk(ctx context.Context, g *spauth.GraphClient, root string, maxDepth int, foldersOnly bool,
+func (d *Drive) Walk(ctx context.Context, g *graphauth.GraphClient, root string, maxDepth int, foldersOnly bool,
 	visit func(it Item, itemPath string, depth int, isLast bool) (descend bool)) error {
 	list := func(dir string) ([]Item, error) { return d.List(ctx, g, dir) }
 	if maxDepth == 0 {
@@ -486,7 +486,7 @@ func walkDir(list func(dir string) ([]Item, error), dir string, depth, maxDepth 
 // (SharePoint paths are case-insensitive, and root may be spelled as the user
 // typed it). Delta can return an item more than once, the last copy being
 // current, and marks removed items deleted; both are resolved here.
-func (d *Drive) subtree(ctx context.Context, g *spauth.GraphClient, root string) (map[string][]Item, error) {
+func (d *Drive) subtree(ctx context.Context, g *graphauth.GraphClient, root string) (map[string][]Item, error) {
 	libURL, err := d.libraryURL(ctx, g)
 	if err != nil {
 		return nil, err
@@ -532,7 +532,7 @@ func (d *Drive) subtree(ctx context.Context, g *spauth.GraphClient, root string)
 
 // libraryURL fetches the library's own webUrl, the prefix every item's webUrl
 // is resolved against.
-func (d *Drive) libraryURL(ctx context.Context, g *spauth.GraphClient) (*url.URL, error) {
+func (d *Drive) libraryURL(ctx context.Context, g *graphauth.GraphClient) (*url.URL, error) {
 	body, err := g.Get(ctx, "/drives/"+d.DriveID, url.Values{"$select": {"webUrl"}})
 	if err != nil {
 		return nil, err
@@ -562,7 +562,7 @@ type SearchHit struct {
 // index returns rather than a complete listing. Each hit's path is derived from
 // its webUrl, and hits outside root are dropped, so the scope holds whatever
 // the service does with the folder in the request.
-func (d *Drive) Search(ctx context.Context, g *spauth.GraphClient, root, query string) ([]SearchHit, error) {
+func (d *Drive) Search(ctx context.Context, g *graphauth.GraphClient, root, query string) ([]SearchHit, error) {
 	libURL, err := d.libraryURL(ctx, g)
 	if err != nil {
 		return nil, err
@@ -621,7 +621,7 @@ const uploadChunkSize = 10 * 1024 * 1024
 
 // Stat returns metadata for a single item at the library-relative path ("" or
 // "/" for the drive root). Used to validate "cd" targets and to size downloads.
-func (d *Drive) Stat(ctx context.Context, g *spauth.GraphClient, path string) (Item, error) {
+func (d *Drive) Stat(ctx context.Context, g *graphauth.GraphClient, path string) (Item, error) {
 	body, err := g.Get(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(path)), url.Values{
 		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl"},
 	})
@@ -637,7 +637,7 @@ func (d *Drive) Stat(ctx context.Context, g *spauth.GraphClient, path string) (I
 
 // Download streams the content of a remote file at the library-relative path
 // into w. (FTP "get".)
-func (d *Drive) Download(ctx context.Context, g *spauth.GraphClient, path string, w io.Writer) error {
+func (d *Drive) Download(ctx context.Context, g *graphauth.GraphClient, path string, w io.Writer) error {
 	rc, err := g.GetStream(ctx, fmt.Sprintf("/drives/%s%s/content", d.DriveID, itemRef(path)))
 	if err != nil {
 		return err
@@ -653,7 +653,7 @@ func (d *Drive) Download(ctx context.Context, g *spauth.GraphClient, path string
 // "put".) Files at or below SimpleUploadMax go in a single PUT; larger files use
 // a chunked, resumable upload session. An existing file at the path is replaced.
 // It returns the stored item as Graph reports it once the upload completes.
-func (d *Drive) Upload(ctx context.Context, g *spauth.GraphClient, path, contentType string, r io.Reader, size int64) (Item, error) {
+func (d *Drive) Upload(ctx context.Context, g *graphauth.GraphClient, path, contentType string, r io.Reader, size int64) (Item, error) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -684,7 +684,7 @@ func (d *Drive) Upload(ctx context.Context, g *spauth.GraphClient, path, content
 // then streams uploadChunkSize-byte ranges from r until size bytes are sent. The
 // session is cancelled on failure so a partial upload leaves nothing behind. It
 // returns the body of the final chunk's response, which is the finished item.
-func (d *Drive) uploadSession(ctx context.Context, g *spauth.GraphClient, path string, r io.Reader, size int64) ([]byte, error) {
+func (d *Drive) uploadSession(ctx context.Context, g *graphauth.GraphClient, path string, r io.Reader, size int64) ([]byte, error) {
 	body, err := g.Post(ctx, fmt.Sprintf("/drives/%s%s/createUploadSession", d.DriveID, itemRef(path)),
 		map[string]interface{}{
 			"item": map[string]interface{}{
@@ -746,7 +746,7 @@ func (d *Drive) uploadSession(ctx context.Context, g *spauth.GraphClient, path s
 // remote copy carries the source file's mtime, keeping later size+mtime
 // comparisons stable instead of re-uploading on every run. The time is sent at
 // whole-second precision in UTC, which Graph accepts unambiguously.
-func (d *Drive) SetMTime(ctx context.Context, g *spauth.GraphClient, path string, t time.Time) error {
+func (d *Drive) SetMTime(ctx context.Context, g *graphauth.GraphClient, path string, t time.Time) error {
 	body := map[string]interface{}{
 		"fileSystemInfo": map[string]string{
 			"lastModifiedDateTime": t.UTC().Format(time.RFC3339),
@@ -758,7 +758,7 @@ func (d *Drive) SetMTime(ctx context.Context, g *spauth.GraphClient, path string
 
 // Mkdir creates a folder at the library-relative path. (FTP "mkdir".) Fails if
 // something already exists at that path.
-func (d *Drive) Mkdir(ctx context.Context, g *spauth.GraphClient, path string) error {
+func (d *Drive) Mkdir(ctx context.Context, g *graphauth.GraphClient, path string) error {
 	parent, leaf := splitPath(path)
 	if leaf == "" {
 		return fmt.Errorf("mkdir: empty folder name")
@@ -782,7 +782,7 @@ func (d *Drive) Mkdir(ctx context.Context, g *spauth.GraphClient, path string) e
 // error also keeps this off Graph's exact wording: the errors here are formatted
 // strings with no status code to match on, and a message that shifts under a
 // service update would silently turn idempotence back into a failed run.
-func (d *Drive) MkdirIfMissing(ctx context.Context, g *spauth.GraphClient, path string) error {
+func (d *Drive) MkdirIfMissing(ctx context.Context, g *graphauth.GraphClient, path string) error {
 	err := d.Mkdir(ctx, g, path)
 	if err == nil {
 		return nil
@@ -796,7 +796,7 @@ func (d *Drive) MkdirIfMissing(ctx context.Context, g *spauth.GraphClient, path 
 // Remove deletes the file or folder at the library-relative path. (FTP
 // "delete"/"rmdir".) Folder deletes are recursive in Graph, so callers should
 // confirm first.
-func (d *Drive) Remove(ctx context.Context, g *spauth.GraphClient, path string) error {
+func (d *Drive) Remove(ctx context.Context, g *graphauth.GraphClient, path string) error {
 	if strings.Trim(path, "/") == "" {
 		return fmt.Errorf("refusing to delete the drive root")
 	}
@@ -807,7 +807,7 @@ func (d *Drive) Remove(ctx context.Context, g *spauth.GraphClient, path string) 
 // (FTP "rename".) It resolves the destination's parent folder to an item ID and
 // PATCHes the source — the id-based parentReference is more reliable than the
 // path-based form.
-func (d *Drive) Move(ctx context.Context, g *spauth.GraphClient, src, dst string) error {
+func (d *Drive) Move(ctx context.Context, g *graphauth.GraphClient, src, dst string) error {
 	if strings.Trim(src, "/") == "" {
 		return fmt.Errorf("refusing to move the drive root")
 	}
@@ -829,7 +829,7 @@ func (d *Drive) Move(ctx context.Context, g *spauth.GraphClient, src, dst string
 
 // itemID returns the Graph item ID for a library-relative path ("" or "/" for
 // the root).
-func (d *Drive) itemID(ctx context.Context, g *spauth.GraphClient, path string) (string, error) {
+func (d *Drive) itemID(ctx context.Context, g *graphauth.GraphClient, path string) (string, error) {
 	body, err := g.Get(ctx, fmt.Sprintf("/drives/%s%s", d.DriveID, itemRef(path)), url.Values{
 		"$select": {"id"},
 	})

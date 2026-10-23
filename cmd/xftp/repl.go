@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/xfer"
 	"github.com/peterh/liner"
@@ -28,7 +28,7 @@ import (
 // terminal, and failed whether any command has reported an error.
 type session struct {
 	ctx      context.Context
-	g        *spauth.GraphClient
+	g        *graphauth.GraphClient
 	d        *drive.Drive
 	cwd      string
 	localDir string
@@ -38,7 +38,7 @@ type session struct {
 
 // runREPL drives the FTP-style command loop until quit/EOF. It returns a
 // process exit code: 1 if any command failed, so a piped script can tell.
-func runREPL(ctx context.Context, g *spauth.GraphClient, d *drive.Drive) int {
+func runREPL(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = "."

@@ -12,14 +12,14 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/excelano/spauth"
+	"github.com/excelano/graphauth"
 	"github.com/excelano/xfiles/internal/drive"
 	"github.com/excelano/xfiles/internal/xfer"
 )
 
 // runDownload copies a remote file (named by url) to the local dst. dst may be a
 // directory (download into it) or a file path. Returns a process exit code.
-func runDownload(ctx context.Context, g *spauth.GraphClient, url, dst, library string) int {
+func runDownload(ctx context.Context, g *graphauth.GraphClient, url, dst, library string) int {
 	d, err := drive.ResolveDrive(ctx, g, url, library)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind library: %v\n", err)
@@ -67,7 +67,7 @@ func runDownload(ctx context.Context, g *spauth.GraphClient, url, dst, library s
 // remote may be a folder (upload into it), an existing file (overwrite), or a
 // new path. A src of "-" reads from stdin instead. The uploaded file's browser
 // URL is the one line printed on stdout. Returns a process exit code.
-func runUpload(ctx context.Context, g *spauth.GraphClient, src, url, library string) int {
+func runUpload(ctx context.Context, g *graphauth.GraphClient, src, url, library string) int {
 	d, err := drive.ResolveDrive(ctx, g, url, library)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind library: %v\n", err)
@@ -117,7 +117,7 @@ func runUpload(ctx context.Context, g *spauth.GraphClient, src, url, library str
 // inputs still go through chunked upload), then uploads it. Because stdin has no
 // name of its own, the URL must name the destination file — a folder or library
 // root is rejected, since there'd be nothing to call the result.
-func uploadStdin(ctx context.Context, g *spauth.GraphClient, d *drive.Drive, url string) int {
+func uploadStdin(ctx context.Context, g *graphauth.GraphClient, d *drive.Drive, url string) int {
 	remote := d.StartPath
 	if remote == "" {
 		fmt.Fprintln(os.Stderr, "Error: uploading from stdin needs the URL to name the destination file, e.g. .../Reports/out.csv")
