@@ -57,7 +57,7 @@ If you want xftp available to some people but not the whole tenant, open the ent
 
 ## Reviewing and revoking
 
-After consent the application appears permanently under Enterprise applications, where its sign-in logs show exactly who has used it and when. To revoke access for the whole tenant, delete the enterprise application (this removes the consent and the service principal), or set "Enabled for users to sign in" to No under Properties to block it without deleting the record. Either action takes effect for xftp, xcp, xsync, xfind, xtree, and xql alike. An individual user can revoke their own grant at any time at <https://myaccount.microsoft.com/applications>.
+After consent the application appears permanently under Enterprise applications, where its sign-in logs show exactly who has used it and when. To revoke access for the whole tenant, delete the enterprise application (this removes the consent and the service principal), or set "Enabled for users to sign in" to No under Properties to block it without deleting the record. Either action takes effect for every xfiles command and for xql alike. An individual user can revoke their own grant at any time at <https://myaccount.microsoft.com/applications>.
 
 ## Reporting a concern
 
