@@ -13,7 +13,7 @@ package drive
 //
 // Each test owns a folder named for the run in the site's default library and
 // removes it on the way out, except the search test, whose fixture stays in
-// place because the search index takes up to an hour to see a new file.
+// place because the search index can take hours to see a new file.
 
 import (
 	"bytes"
@@ -283,7 +283,7 @@ func TestLiveSearch(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		t.Skipf("created /%s; the search index takes up to an hour to see it, so rerun the live tests after that", searchFixture)
+		t.Skipf("created /%s; the search index can take hours to see it, so rerun the live tests later", searchFixture)
 	}
 
 	hits, err := d.Search(ctx, g, searchFixture+"/Inside", searchTerm)
@@ -294,7 +294,7 @@ func TestLiveSearch(t *testing.T) {
 	for _, h := range hits {
 		paths = append(paths, h.Path)
 	}
-	if len(paths) == 0 && time.Since(item.LastModified) < 2*time.Hour {
+	if len(paths) == 0 && time.Since(item.LastModified) < 24*time.Hour {
 		t.Skipf("/%s was created %s ago and is not indexed yet; rerun later", searchFixture, time.Since(item.LastModified).Round(time.Minute))
 	}
 	if fmt.Sprint(paths) != fmt.Sprint([]string{inside}) {
