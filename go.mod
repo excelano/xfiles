@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/excelano/graphauth v0.2.0
 	github.com/excelano/quickxorhash v1.0.0
-	github.com/peterh/liner v1.2.2
+	github.com/peterh/liner v1.2.3
 	golang.org/x/term v0.47.0
 )
 
@@ -20,7 +20,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/mattn/go-runewidth v0.0.30 // indirect
+	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
