@@ -12,7 +12,8 @@ package drive
 //	XFILES_LIVE_SITE=https://<tenant>.sharepoint.com/sites/<test-site> go test -tags live ./...
 //
 // Each test owns a folder named for the run in the site's default library and
-// removes it on the way out.
+// removes it on the way out, except the search test, whose fixture stays in
+// place because the search index takes up to an hour to see a new file.
 
 import (
 	"bytes"
@@ -234,5 +235,55 @@ func TestLiveResolveDriveVariants(t *testing.T) {
 	}
 	if byURL.StartPath != folder {
 		t.Errorf("by URL StartPath = %q, want %q", byURL.StartPath, folder)
+	}
+}
+
+// searchFixture is the folder the search test keeps permanently, and
+// searchTerm the word only its files contain.
+const (
+	searchFixture = "xfiles-live-search"
+	searchTerm    = "xfilessearchfixture"
+)
+
+// Search against a fixture that outlives the run: a hit inside the searched
+// folder and a hit outside it, both carrying the same word in their contents
+// only. The first run creates the fixture and skips, since the index cannot see
+// it yet; a later run must find the inside hit and not the outside one.
+func TestLiveSearch(t *testing.T) {
+	ctx, g, d := liveDrive(t)
+	inside, outside := searchFixture+"/Inside/hit.txt", searchFixture+"/Outside/hit.txt"
+
+	item, err := d.Stat(ctx, g, inside)
+	if err != nil {
+		for _, p := range []string{searchFixture, searchFixture + "/Inside", searchFixture + "/Outside"} {
+			if err := d.MkdirIfMissing(ctx, g, p); err != nil {
+				t.Fatal(err)
+			}
+		}
+		body := []byte("This file exists for the xfiles search test: " + searchTerm + "\n")
+		for _, p := range []string{inside, outside} {
+			if _, err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader(body), int64(len(body))); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Skipf("created /%s; the search index takes up to an hour to see it, so rerun the live tests after that", searchFixture)
+	}
+
+	hits, err := d.Search(ctx, g, searchFixture+"/Inside", searchTerm)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	var paths []string
+	for _, h := range hits {
+		paths = append(paths, h.Path)
+	}
+	if len(paths) == 0 && time.Since(item.LastModified) < 2*time.Hour {
+		t.Skipf("/%s was created %s ago and is not indexed yet; rerun later", searchFixture, time.Since(item.LastModified).Round(time.Minute))
+	}
+	if fmt.Sprint(paths) != fmt.Sprint([]string{inside}) {
+		t.Errorf("Search of /%s/Inside returned %v, want [%s]", searchFixture, paths, inside)
+	}
+	if len(hits) == 1 && hits[0].WebURL == "" {
+		t.Error("search hit carries no webUrl")
 	}
 }
