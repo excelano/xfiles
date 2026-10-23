@@ -157,11 +157,11 @@ func run() int {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println("xcp " + buildinfo.Resolve(version))
+		fmt.Println("xcp " + buildinfo.Resolve(version) + " (skill " + xfiles.SkillRevision() + ")")
 		return 0
 	}
 	if *installSkill {
-		return xfiles.InstallSkill(buildinfo.Resolve(version))
+		return xfiles.InstallSkill()
 	}
 	if *uninstallSkill {
 		return xfiles.UninstallSkill()

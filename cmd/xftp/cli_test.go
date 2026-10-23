@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -5,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/excelano/xfiles"
 )
 
 // runCLI drives run() the way a shell would, capturing what reaches stdout.
@@ -57,6 +62,9 @@ func TestVersionNamesTheTool(t *testing.T) {
 	}
 	if !strings.HasPrefix(out, "xftp ") {
 		t.Errorf("version = %q, want it to name the tool", out)
+	}
+	if want := "(skill " + xfiles.SkillRevision() + ")\n"; !strings.HasSuffix(out, want) {
+		t.Errorf("version = %q, want it to end %q, the revision the stamp carries", out, want)
 	}
 }
 

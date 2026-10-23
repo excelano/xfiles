@@ -219,7 +219,7 @@ xfiles was built for AI coding agents as much as for people, so the repo ships a
 xcp --install-skill
 ```
 
-That writes `~/.claude/skills/xfiles/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
+That writes `~/.claude/skills/xfiles/` and stamps in the skill's revision, which `xcp -V` also prints, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
 The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, cargo, or a build from source.
 

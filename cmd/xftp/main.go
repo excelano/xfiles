@@ -89,11 +89,11 @@ func run() int {
 		return 2
 	}
 	if *showVersion {
-		fmt.Println("xftp " + buildinfo.Resolve(version))
+		fmt.Println("xftp " + buildinfo.Resolve(version) + " (skill " + xfiles.SkillRevision() + ")")
 		return 0
 	}
 	if *installSkill {
-		return xfiles.InstallSkill(buildinfo.Resolve(version))
+		return xfiles.InstallSkill()
 	}
 	if *uninstallSkill {
 		return xfiles.UninstallSkill()
