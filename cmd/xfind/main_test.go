@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -54,6 +57,35 @@ func TestRelTo(t *testing.T) {
 	for _, c := range cases {
 		if got := relTo(c.root, c.full); got != c.want {
 			t.Errorf("%s: relTo(%q,%q) = %q, want %q", c.name, c.root, c.full, got, c.want)
+		}
+	}
+}
+
+func TestDepthBelow(t *testing.T) {
+	cases := []struct {
+		root, p string
+		want    int
+	}{
+		{"", "a.txt", 1},
+		{"", "Reports/a.txt", 2},
+		{"Reports", "Reports/a.txt", 1},
+		{"Reports", "Reports/2026/Q1/a.txt", 3},
+	}
+	for _, c := range cases {
+		if got := depthBelow(c.root, c.p); got != c.want {
+			t.Errorf("depthBelow(%q, %q) = %d, want %d", c.root, c.p, got, c.want)
+		}
+	}
+}
+
+func TestSortHits(t *testing.T) {
+	hits := []drive.SearchHit{{Path: "b/x.txt"}, {Path: "A/y.txt"}, {Path: "a/z.txt"}}
+	sortHits(hits)
+	got := []string{hits[0].Path, hits[1].Path, hits[2].Path}
+	want := []string{"A/y.txt", "a/z.txt", "b/x.txt"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("sortHits order = %v, want %v", got, want)
 		}
 	}
 }

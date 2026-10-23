@@ -3,10 +3,10 @@ name: xfiles
 description: >-
   Upload, download, mirror, and delete files in a SharePoint document library
   from the command line: `xcp` copies one file, `xsync` mirrors a tree, `xftp`
-  runs an FTP-style session, and `xfind`/`xtree` list a known location by name.
-  Use it when a file has to be put on SharePoint, pulled to disk for another
-  tool, or kept in sync. To find a document by topic or content, use a search
-  tool instead; for SharePoint list rows and columns, use `xql sp`.
+  runs an FTP-style session, `xfind` lists or searches a location, and `xtree`
+  shows its shape. Use it when a file has to be put on SharePoint, pulled to disk
+  for another tool, or kept in sync. For SharePoint list rows and columns, use
+  `xql sp`.
 ---
 
 # xfiles
@@ -22,11 +22,18 @@ are in `reference.md` beside this file. Read it when you need them.
 
 xfiles writes to SharePoint. It uploads, downloads to disk so another tool can process
 the file, mirrors a tree, and deletes, which search connectors and read-only integrations
-cannot do. It is the wrong tool for discovery: `xfind` matches names only and walks every
-folder below the URL, so "find the document about X" belongs to a search tool when one is
-available. Use `xfind` and `xtree` when the location is known and you need names or
-counts. List rows and columns belong to `xql sp`, which shares the sign-in. xfiles works
+cannot do. List rows and columns belong to `xql sp`, which shares the sign-in. xfiles works
 on live content and is not a backup or versioning tool.
+
+## Finding files
+
+Plain `xfind` walks the live folders below the URL and matches by name, so its answer is
+complete and current. `xfind --search 'terms'` asks SharePoint's search index instead and
+matches contents and metadata too, which is what "find the document about X" needs; a
+Microsoft 365 search tool reads the same index. The index trails uploads, often by many
+minutes, and returns what it ranks rather than everything, so look for a file you just
+uploaded by name, not by search, and don't read an empty search result as proof that
+nothing exists.
 
 ## Addressing
 

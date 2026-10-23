@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package main
 
 import (
@@ -62,6 +65,12 @@ func TestVersionNamesTheTool(t *testing.T) {
 
 func TestUnknownFlagIsABadInvocation(t *testing.T) {
 	if code, _ := runCLI(t, "--no-such-flag"); code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+}
+
+func TestEmptySearchIsABadInvocation(t *testing.T) {
+	if code, _ := runCLI(t, "--search", "", "https://contoso.sharepoint.com/sites/Marketing"); code != 2 {
 		t.Errorf("exit = %d, want 2", code)
 	}
 }

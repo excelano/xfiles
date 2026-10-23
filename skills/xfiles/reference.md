@@ -112,10 +112,16 @@ it pipes into `wc`, `grep`, `xargs`, etc. Read-only.
 | `--type f` \| `--type d` | restrict to files or folders |
 | `--maxdepth <n>` | descend at most `n` folder levels (`0` = unlimited) |
 | `--url` | print each match's browser URL instead of its path |
+| `--search <terms>` | ask the search index instead of walking; matches names, contents, and metadata |
 | `--library <NAME>` | force the library |
 
-Matching is by name only: xfind walks the folders below the URL and does not search
-file contents or metadata. `--type d` skips listing file entries entirely (an efficiency
+Without `--search`, xfind walks the folders below the URL and matches by name, so the
+result is complete and current. With it, xfind queries SharePoint's search index for the
+library, keeps only hits below the URL's folder, and prints them in path order; `--name`,
+`--iname`, `--type`, `--maxdepth`, and `--url` still apply. The index trails uploads,
+often by many minutes and unevenly from file to file, and returns what it ranks rather
+than a complete listing, so an empty result is not proof of absence. `--search ''` is a
+bad invocation (exit 2). Without `--search`, `--type d` skips listing file entries entirely (an efficiency
 win, not just a filter).
 
 ## xtree — indented tree (tree)

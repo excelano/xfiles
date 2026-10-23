@@ -1,6 +1,12 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 package drive
 
-import "testing"
+import (
+	"net/url"
+	"testing"
+)
 
 func TestItemRef(t *testing.T) {
 	cases := []struct {
@@ -115,6 +121,28 @@ func TestSplitPath(t *testing.T) {
 		parent, leaf := splitPath(c.in)
 		if parent != c.parent || leaf != c.leaf {
 			t.Errorf("splitPath(%q) = (%q, %q), want (%q, %q)", c.in, parent, leaf, c.parent, c.leaf)
+		}
+	}
+}
+
+func TestLibraryPath(t *testing.T) {
+	lib, _ := url.Parse("https://c.sharepoint.com/sites/Marketing/Shared%20Documents")
+	cases := []struct {
+		name, in, want string
+		ok             bool
+	}{
+		{"escaped", "https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Reports/Q1%20Plan.xlsx", "Reports/Q1 Plan.xlsx", true},
+		// Microsoft Search returns webUrls with literal spaces.
+		{"literal spaces", "https://c.sharepoint.com/sites/Marketing/Shared Documents/Reports/Q1 Plan.xlsx", "Reports/Q1 Plan.xlsx", true},
+		{"case differs", "https://C.sharepoint.com/sites/marketing/shared%20documents/a.txt", "a.txt", true},
+		{"other library", "https://c.sharepoint.com/sites/Marketing/Project%20Files/a.txt", "", false},
+		{"other host", "https://d.sharepoint.com/sites/Marketing/Shared%20Documents/a.txt", "", false},
+		{"library itself", "https://c.sharepoint.com/sites/Marketing/Shared%20Documents", "", false},
+	}
+	for _, c := range cases {
+		got, ok := libraryPath(lib, c.in)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%s: libraryPath = (%q, %v), want (%q, %v)", c.name, got, ok, c.want, c.ok)
 		}
 	}
 }

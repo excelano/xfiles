@@ -469,6 +469,75 @@ func (d *Drive) walkDir(ctx context.Context, g *spauth.GraphClient, dir string, 
 	return nil
 }
 
+// SearchHit is one search result: the item and its library-relative path.
+type SearchHit struct {
+	Item
+	Path string
+}
+
+// Search asks the library's search index for items below the library-relative
+// folder root whose name, content, or metadata match query. The index trails
+// uploads, so a recently added file can be missing, and the result is what the
+// index returns rather than a complete listing. Each hit's path is derived from
+// its webUrl, and hits outside root are dropped, so the scope holds whatever
+// the service does with the folder in the request.
+func (d *Drive) Search(ctx context.Context, g *spauth.GraphClient, root, query string) ([]SearchHit, error) {
+	body, err := g.Get(ctx, "/drives/"+d.DriveID, url.Values{"$select": {"webUrl"}})
+	if err != nil {
+		return nil, err
+	}
+	var lib struct {
+		WebURL string `json:"webUrl"`
+	}
+	if err := json.Unmarshal(body, &lib); err != nil {
+		return nil, fmt.Errorf("decoding library: %w", err)
+	}
+	libURL, err := url.Parse(lib.WebURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing library webUrl: %w", err)
+	}
+
+	q := url.PathEscape(strings.ReplaceAll(query, "'", "''"))
+	raws, err := g.GetAll(ctx, fmt.Sprintf("/drives/%s%s/search(q='%s')", d.DriveID, itemRef(root), q), url.Values{
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	rootSegs := urlPathSegments(root)
+	var hits []SearchHit
+	for _, raw := range raws {
+		var j driveItemJSON
+		if err := json.Unmarshal(raw, &j); err != nil {
+			return nil, fmt.Errorf("decoding search result: %w", err)
+		}
+		p, ok := libraryPath(libURL, j.WebURL)
+		if !ok {
+			continue
+		}
+		segs := urlPathSegments(p)
+		if len(segs) <= len(rootSegs) || !segsHasPrefix(segs, rootSegs) {
+			continue
+		}
+		hits = append(hits, SearchHit{Item: j.toItem(), Path: p})
+	}
+	return hits, nil
+}
+
+// libraryPath turns an item's webUrl into its path relative to the library at
+// lib. ok is false when the item is not inside that library.
+func libraryPath(lib *url.URL, webURL string) (string, bool) {
+	u, err := url.Parse(webURL)
+	if err != nil || !strings.EqualFold(u.Host, lib.Host) {
+		return "", false
+	}
+	segs, libSegs := urlPathSegments(u.Path), urlPathSegments(lib.Path)
+	if len(segs) <= len(libSegs) || !segsHasPrefix(segs, libSegs) {
+		return "", false
+	}
+	return strings.Join(segs[len(libSegs):], "/"), true
+}
+
 // simpleUploadMax is Graph's ceiling for a single PUT to /content. Files at or
 // below this go in one request; larger files use a chunked upload session.
 const simpleUploadMax = 250 * 1024 * 1024

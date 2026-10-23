@@ -178,7 +178,9 @@ xsync --delete --yes ./reports "https://contoso.sharepoint.com/sites/Marketing/S
 
 Where `ls` shows one folder, `xfind` and `xtree` walk a whole library. Both take a single SharePoint URL — site, library, or folder — and recurse from there, the same URL shapes the other tools accept, copy links included. Both are read-only: they only ever list.
 
-`xfind` prints one path per line, relative to the folder the URL points at, the way `find` prints paths relative to its starting directory. With no flags it lists everything; `--name` (or case-insensitive `--iname`) filters by a glob on the file or folder name, `--type f` or `--type d` restricts to files or folders, and `--maxdepth` limits how deep it descends. `--url` prints each match's browser URL in place of its path. Matching is by name only; xfind does not search file contents or metadata, which is a job for SharePoint search.
+`xfind` prints one path per line, relative to the folder the URL points at, the way `find` prints paths relative to its starting directory. With no flags it lists everything; `--name` (or case-insensitive `--iname`) filters by a glob on the file or folder name, `--type f` or `--type d` restricts to files or folders, and `--maxdepth` limits how deep it descends. `--url` prints each match's browser URL in place of its path.
+
+Add `--search` to ask SharePoint's search index instead of walking, which matches file contents and metadata as well as names: `xfind --search 'renewal notice' <url>` finds the documents that mention it anywhere below the URL, in path order, and the other filters still apply. The index trails uploads, often by many minutes, so a file you just uploaded may not show up yet; a plain walk always sees the library as it is.
 
 ```
 xfind https://contoso.sharepoint.com/sites/Marketing

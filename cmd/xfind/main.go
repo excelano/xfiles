@@ -6,7 +6,8 @@
 // filtered by name, type, or depth. It is the read-only, recursive cousin of
 // xftp's "ls" — point it at a site, library, or folder URL and it lists
 // everything beneath, one library-relative path per line, ready to pipe, or
-// with --url each item's browser URL instead.
+// with --url each item's browser URL instead. --search asks the library's search
+// index instead of walking, which matches contents and metadata as well as names.
 // Authentication is device-code; the refresh token is cached at
 // ~/.config/excelano/sp-token.json, shared with xql and the other xfiles tools.
 package main
@@ -21,6 +22,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/excelano/spauth"
@@ -108,6 +110,7 @@ func run() int {
 	typ := fs.String("type", "", "Print only files (f) or only folders (d)")
 	maxDepth := fs.Int("maxdepth", 0, "Descend at most this many folder levels (0 = unlimited)")
 	printURL := fs.Bool("url", false, "Print each match's browser URL instead of its path")
+	search := fs.String("search", "", "Ask the search index for items whose name, contents, or metadata match these terms")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	fs.BoolVar(showVersion, "V", false, "print version and exit (shorthand)")
 	installSkill := fs.Bool("install-skill", false, "install the xfiles Claude Code skill and exit")
@@ -122,8 +125,12 @@ func run() int {
 		fmt.Fprintln(w, "  xfind https://contoso.sharepoint.com/sites/Marketing")
 		fmt.Fprintln(w, "  xfind --name '*.xlsx' --type f https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports")
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Matching is by name, walking the folders beneath the URL; xfind does not")
-		fmt.Fprintln(w, "search file contents or metadata.")
+		fmt.Fprintln(w, "Without --search, matching is by name, walking the folders beneath the URL.")
+		fmt.Fprintln(w, "--search queries SharePoint's search index instead, which also matches file")
+		fmt.Fprintln(w, "contents and metadata. The index trails uploads, often by many minutes, so a")
+		fmt.Fprintln(w, "recent file can be missing, and results are not a complete listing. The other")
+		fmt.Fprintln(w, "filters still apply to what it returns:")
+		fmt.Fprintln(w, "  xfind --search 'renewal notice' --type f https://contoso.sharepoint.com/sites/Marketing")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Wrap a SharePoint \"Copy link\" URL in single quotes; its ? and & characters")
 		fmt.Fprintln(w, "would otherwise be acted on by the shell before xfind sees them.")
@@ -179,6 +186,12 @@ func run() int {
 			return 2
 		}
 	}
+	searchSet := false
+	fs.Visit(func(f *flag.Flag) { searchSet = searchSet || f.Name == "search" })
+	if searchSet && strings.TrimSpace(*search) == "" {
+		fmt.Fprintln(os.Stderr, "Error: --search needs at least one term")
+		return 2
+	}
 	if *maxDepth < 0 {
 		fmt.Fprintln(os.Stderr, "Error: --maxdepth cannot be negative")
 		return 2
@@ -219,8 +232,7 @@ func run() int {
 	root := d.StartPath
 	var matchErr error
 	out := bufio.NewWriter(os.Stdout)
-	// With -type d we never emit files, so skip listing them entirely.
-	walkErr := d.Walk(tctx, g, root, c.typ == "d", func(it drive.Item, p string, depth int, _ bool) bool {
+	emit := func(it drive.Item, p string) {
 		if ok, err := c.match(it); err != nil {
 			matchErr = err
 		} else if ok && *printURL {
@@ -228,17 +240,51 @@ func run() int {
 		} else if ok {
 			fmt.Fprintln(out, relTo(root, p))
 		}
-		// Descend into folders unless a depth limit says to stop here.
-		return it.IsFolder && (*maxDepth == 0 || depth < *maxDepth)
-	})
+	}
+	var findErr error
+	if *search != "" {
+		var hits []drive.SearchHit
+		hits, findErr = d.Search(tctx, g, root, *search)
+		sortHits(hits)
+		for _, h := range hits {
+			if *maxDepth == 0 || depthBelow(root, h.Path) <= *maxDepth {
+				emit(h.Item, h.Path)
+			}
+		}
+	} else {
+		// With -type d we never emit files, so skip listing them entirely.
+		findErr = d.Walk(tctx, g, root, c.typ == "d", func(it drive.Item, p string, depth int, _ bool) bool {
+			emit(it, p)
+			// Descend into folders unless a depth limit says to stop here.
+			return it.IsFolder && (*maxDepth == 0 || depth < *maxDepth)
+		})
+	}
 	out.Flush()
 	if matchErr != nil {
 		fmt.Fprintf(os.Stderr, "find failed: %v\n", matchErr)
 		return 1
 	}
-	if walkErr != nil {
-		fmt.Fprintf(os.Stderr, "find failed: %v\n", walkErr)
+	if findErr != nil {
+		fmt.Fprintf(os.Stderr, "find failed: %v\n", findErr)
 		return 1
 	}
 	return 0
+}
+
+// sortHits puts search results in path order, compared case-insensitively, so
+// the output reads like a walk's instead of in relevance order.
+func sortHits(hits []drive.SearchHit) {
+	sort.Slice(hits, func(i, j int) bool {
+		li, lj := strings.ToLower(hits[i].Path), strings.ToLower(hits[j].Path)
+		if li != lj {
+			return li < lj
+		}
+		return hits[i].Path < hits[j].Path
+	})
+}
+
+// depthBelow counts the folder levels from root to the item at p, so a direct
+// child of root is depth 1, matching the walk's depth.
+func depthBelow(root, p string) int {
+	return strings.Count(relTo(root, p), "/") + 1
 }
