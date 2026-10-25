@@ -38,7 +38,8 @@ nothing exists.
 ## Addressing
 
 The SharePoint side is always a URL: a site, a library, or a folder, including one copied
-from the browser. For `xcp` and `xsync`, whichever operand is the URL is the SharePoint
+from the browser. A OneDrive for work or school URL (`https://<tenant>-my.sharepoint.com/personal/<user>/...`)
+works the same way. For `xcp` and `xsync`, whichever operand is the URL is the SharePoint
 side, so operand order sets the direction. Single-quote any "Copy link" URL, because the
 shell acts on its `?` and `&` before the tool sees them.
 

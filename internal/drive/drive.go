@@ -85,9 +85,10 @@ func parseSiteURL(rawURL string) (hostname, sitePath, restPath string, err error
 		return hostname, "", "", nil
 	}
 
-	// A canonical site URL is /sites/{name} or /teams/{name}; keep just that
-	// prefix as the site path. Anything beyond it is the library/folder path.
-	if len(parts) >= 2 && (strings.EqualFold(parts[0], "sites") || strings.EqualFold(parts[0], "teams")) {
+	// A canonical site URL is /sites/{name}, /teams/{name}, or a OneDrive's
+	// /personal/{name}; keep just that prefix as the site path. Anything
+	// beyond it is the library/folder path.
+	if len(parts) >= 2 && (strings.EqualFold(parts[0], "sites") || strings.EqualFold(parts[0], "teams") || strings.EqualFold(parts[0], "personal")) {
 		sitePath = "/" + parts[0] + "/" + parts[1]
 		return hostname, sitePath, strings.Join(parts[2:], "/"), nil
 	}

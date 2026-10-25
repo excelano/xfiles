@@ -36,6 +36,9 @@ func TestParseSiteURL(t *testing.T) {
 		{"https://c.sharepoint.com/sites/Marketing/", "c.sharepoint.com", "/sites/Marketing", ""},
 		{"https://c.sharepoint.com/sites/Marketing/Shared%20Documents/Reports", "c.sharepoint.com", "/sites/Marketing", "Shared Documents/Reports"},
 		{"https://c.sharepoint.com/teams/Eng/Project%20Files", "c.sharepoint.com", "/teams/Eng", "Project Files"},
+		{"https://c-my.sharepoint.com/personal/ann_c_com", "c-my.sharepoint.com", "/personal/ann_c_com", ""},
+		{"https://c-my.sharepoint.com/personal/ann_c_com/Documents/Reports", "c-my.sharepoint.com", "/personal/ann_c_com", "Documents/Reports"},
+		{"https://c-my.sharepoint.com/personal/ann_c_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fann_c_com%2FDocuments", "c-my.sharepoint.com", "/personal/ann_c_com", "_layouts/15/onedrive.aspx"},
 		{"https://c.sharepoint.com", "c.sharepoint.com", "", ""},
 		{"https://c.sharepoint.com/Shared%20Documents", "c.sharepoint.com", "", "Shared Documents"},
 		// "Copy link" sharing URLs: /:type:/action/ prefix is stripped.

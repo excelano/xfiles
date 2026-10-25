@@ -64,11 +64,12 @@ xcp --install-skill
 
 ## Pointing at a library
 
-Every tool takes a SharePoint URL — a site, a document library, or a folder, including the link you copy straight from the browser address bar.
+Every tool takes a SharePoint URL — a site, a document library, or a folder, including the link you copy straight from the browser address bar. A OneDrive for work or school is a SharePoint library too, and its URLs work the same way.
 
 ```
 https://contoso.sharepoint.com/sites/Marketing
 https://contoso.sharepoint.com/sites/Marketing/Shared%20Documents/Reports
+https://contoso-my.sharepoint.com/personal/ann_contoso_com/Documents/Reports
 ```
 
 Wrap the URL in single quotes if it contains `?` or `&`, which the "Copy link" button's URLs always do — otherwise the shell splits the command on the `&` before the tool ever sees it. A plain site or folder URL like the ones above needs no quoting.

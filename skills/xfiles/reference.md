@@ -4,7 +4,8 @@ Complete reference for the `xfiles` commands. Load this when `SKILL.md` isn't
 specific enough — per-tool flags, the `xftp` session command set, transfer and
 large-file behavior, auth/consent details, and token-cache locations.
 
-Every tool takes a SharePoint URL (site, library, or folder). Every tool accepts
+Every tool takes a SharePoint URL (site, library, or folder), a OneDrive for work or
+school URL included. Every tool accepts
 `--library "Display Name"` to force a library regardless of the URL, and the standard
 `--version` / `-V` and `--help` / `-h`. Single-quote any "Copy link" URL — its `?`/`&`
 are shell metacharacters.
