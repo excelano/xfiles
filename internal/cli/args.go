@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Package cli holds the argument-handling conventions the five binaries share.
 //
 // Each of xtree, xfind, xcp, xsync, and xftp builds its own flag.FlagSet, but

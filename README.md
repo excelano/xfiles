@@ -14,7 +14,7 @@ Each is a single static Go binary with no daemon and no mounted filesystem. Auth
 
 ## Install
 
-Every install line below ends with `xcp --install-skill`. That installs the [Claude Code skill](#use-it-from-claude-code) alongside the binary, which is the one step people reliably skipped when it lived further down the page. Drop it if you do not use Claude Code — the CLI itself does not need it.
+Every install line below ends with `xcp --install-skill`. That installs the [Claude Code skill](#use-it-from-claude-code) alongside the binary. Drop it if you do not use Claude Code — the CLI itself does not need it.
 
 ### Debian and Ubuntu
 
@@ -49,7 +49,7 @@ brew install xftp xcp xsync xfind xtree && xcp --install-skill
 
 ### Go
 
-From source (Go 1.24 or later):
+From source, with a Go toolchain — `go.mod` names the version it needs, and Go fetches that toolchain automatically if yours is older:
 
 ```
 go install github.com/excelano/xfiles/cmd/xftp@latest
@@ -93,21 +93,7 @@ xftp:/Reports> put report.pdf Archive/report.pdf
 
 Paths may be relative to the current folder or absolute with a leading `/`, and `.`/`..` work as you'd expect. Names containing spaces can be quoted (`"Phase 2"` or `'Phase 2'`) or escaped (`Phase\ 2`), the same way you would in a shell.
 
-| Command | What it does |
-|---|---|
-| `ls [path]` | List a remote folder. Defaults to the current folder. |
-| `cd [path]` | Change remote folder. With no argument, prints the current folder. |
-| `pwd` | Print the current remote folder. |
-| `get <remote> [local]` | Download a file. Defaults the local name to the remote's. |
-| `put <local> [remote]` | Upload a file. Files over 250 MB upload in chunks, with progress. Defaults the remote name to the local's. |
-| `mkdir <path>` | Create a remote folder. |
-| `rm [-r] <path>` | Delete a file. Folders are recursive, so they prompt for confirmation first unless given `-r`. |
-| `mv <src> <dst>` | Move or rename a remote item. |
-| `lcd [dir]` | Change the local working folder for `get`/`put`. With no argument, prints it. |
-| `lpwd` | Print the local working folder. |
-| `lls [dir]` | List a local folder. |
-| `help` | Show the command list. |
-| `quit` | Exit. |
+The remote verbs are `ls`, `cd`, `pwd`, `get`, `put`, `mkdir`, `rm` and `mv`; `lcd`, `lpwd` and `lls` do the same on the local side for `get` and `put`; `help` lists them and `quit` leaves. Each verb's arguments and defaults are in the [reference](skills/xfiles/reference.md#xftp--interactive-session-ftp).
 
 Deleting a single file goes straight through, since SharePoint routes it to the recycle bin and it can be recovered there. Deleting a folder is recursive and irreversible from xftp's side, so it asks first.
 
@@ -202,7 +188,7 @@ xtree -L 2 -d "https://contoso.sharepoint.com/sites/Marketing/Shared Documents"
 
 The suite authenticates through a multi-tenant Azure app registration ("Excelano SharePoint tools"), shared across the xfiles commands and the sibling tool [xql](https://github.com/excelano/xql), so consenting once covers them all. Pointing a tool at another organization's site uses that same registration — nobody sets up their own. The first connection to a new tenant raises a one-time consent prompt; depending on that tenant's policy, either the user or an administrator clears it, after which everyone in the tenant is covered. The single scope requested is `Sites.ReadWrite.All`. If your organization restricts user consent, [ADMINS.md](ADMINS.md) has everything your IT department needs to review and approve the application.
 
-The session is shared as well as the consent. Sign-in is device-code: the first connection prints a short code and a URL, you sign in once in a browser, and the refresh token is cached at `~/.config/excelano/sp-token.json` (under `$XDG_CONFIG_HOME` when set), one file for every xfiles command and for `xql sp`, so signing in with any of them signs in the rest. A cache left by an earlier version under `~/.config/<tool>` is adopted the first time the new version runs, so upgrading costs no sign-in. Delete the shared file to force re-authentication for the whole family. `xftp auth` (or any sibling's `auth`) reports the state of that session, with `--json` for a script, and exits 0 whether or not one exists; it never starts a sign-in, so it is the safe question to ask before unattended work.
+The session is shared as well as the consent. Sign-in is device-code: the first connection prints a short code and a URL, you sign in once in a browser, and the refresh token is cached at `~/.config/excelano/sp-token.json` (under `$XDG_CONFIG_HOME` when set), one file for every xfiles command and for `xql sp`, so signing in with any of them signs in the rest. A per-tool cache under `~/.config/<tool>` is adopted into it; the [reference](skills/xfiles/reference.md#auth-consent-and-tenants) has the details. Delete the shared file to force re-authentication for the whole family. `xftp auth` (or any sibling's `auth`) reports the state of that session, with `--json` for a script, and exits 0 whether or not one exists; it never starts a sign-in, so it is the safe question to ask before unattended work.
 
 The sign-in layer lives in its own module, [graphauth](https://github.com/excelano/graphauth), which this repository and xql both import. To use your own app registration instead, change the `ClientID` of `graphauth.SharePoint` there and rebuild.
 
@@ -222,7 +208,7 @@ xcp --install-skill
 
 That writes `~/.claude/skills/xfiles/` and stamps in the skill's revision, which `xcp -V` also prints, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
-The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, cargo, or a build from source.
+The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, or a build from source.
 
 ## Building
 

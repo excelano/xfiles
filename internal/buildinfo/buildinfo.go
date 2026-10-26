@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 // Package buildinfo resolves the version string an xfiles binary reports.
 //
 // Releases stamp the version in through -ldflags at build time. A binary

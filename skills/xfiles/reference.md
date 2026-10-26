@@ -44,19 +44,19 @@ quoted (`"Phase 2"`, `'Phase 2'`) or escaped (`Phase\ 2`) as in a shell.
 
 | Command | Effect |
 |---|---|
-| `ls [path]` | list a remote folder (default: current) |
+| `ls [path]` (alias `dir`) | list a remote folder (default: current) |
 | `cd [path]` | change remote folder; **no arg prints the current folder** |
 | `pwd` | print the current remote folder |
 | `get <remote> [local]` | download; local name defaults to the remote's |
 | `put <local> [remote]` | upload; remote name defaults to the local's; >250 MB chunks with progress |
 | `mkdir <path>` | create a remote folder |
-| `rm [-r] <path>` | delete a file (→ recycle bin); a **folder** asks first, or goes straight through with `-r` |
-| `mv <src> <dst>` | move or rename a remote item |
+| `rm [-r] <path>` (alias `delete`) | delete a file (→ recycle bin); a **folder** asks first, or goes straight through with `-r` |
+| `mv <src> <dst>` (alias `rename`) | move or rename a remote item |
 | `lcd [dir]` | change the local working dir for get/put; no arg prints it |
 | `lpwd` | print the local working dir |
 | `lls [dir]` | list a local folder |
-| `help` | command list |
-| `quit` | exit |
+| `help` (alias `?`) | command list |
+| `quit` (aliases `exit`, `bye`) | exit |
 
 Commands can be piped on stdin, one per line, and xftp exits 1 if any of them failed. A
 folder `rm` is recursive; in a terminal it asks first, and with no terminal it refuses
@@ -174,8 +174,10 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
   remedy is to run the command once interactively and then re-run it unattended.
 - **One shared cache:** every tool, and `xql sp`, reads and writes
   `~/.config/excelano/sp-token.json` (`XDG_CONFIG_HOME` respected), so a login with any
-  one of them covers the rest. A cache left by an earlier version under
-  `~/.config/<tool>` is adopted on first run.
+  one of them covers the rest. A per-tool cache at `~/.config/<tool>/sp-token.json` is
+  adopted on first run: its contents are stored at the shared path, and the per-tool
+  file is deleted once the shared copy is confirmed encrypted. Where no encryption
+  backend is reachable, it is left in place for the uninstaller's purge step to remove.
 - **State command:** `<tool> auth [--json]` reports that session (account, tenant, token
   expiry, scopes) and exits 0 whether or not one exists. Exit 1 only when the state could
   not be determined (cache unreadable, sign-in server unreachable); 2 for a bad
