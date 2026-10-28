@@ -366,7 +366,10 @@ type driveItemJSON struct {
 	FileSystemInfo *struct {
 		LastModifiedDateTime string `json:"lastModifiedDateTime"`
 	} `json:"fileSystemInfo"`
-	WebURL  string    `json:"webUrl"`
+	WebURL          string `json:"webUrl"`
+	ParentReference *struct {
+		ID string `json:"id"`
+	} `json:"parentReference"`
 	Deleted *struct{} `json:"deleted"`
 }
 
@@ -485,15 +488,17 @@ func walkDir(list func(dir string) ([]Item, error), dir string, depth, maxDepth 
 // subtree lists everything below the library-relative root with a delta query
 // and groups it by parent folder, keyed by lower-cased library-relative path
 // (SharePoint paths are case-insensitive, and root may be spelled as the user
-// typed it). Delta can return an item more than once, the last copy being
-// current, and marks removed items deleted; both are resolved here.
+// typed it). Paths are rebuilt from parentReference ids down from root, since a
+// file that opens in Office for the web carries a _layouts/15/Doc.aspx webUrl
+// rather than its path. Delta can return an item more than once, the last copy
+// being current, and marks removed items deleted; both are resolved here.
 func (d *Drive) subtree(ctx context.Context, g *graphauth.GraphClient, root string) (map[string][]Item, error) {
-	libURL, err := d.libraryURL(ctx, g)
+	rootItem, err := d.Stat(ctx, g, root)
 	if err != nil {
 		return nil, err
 	}
 	raws, err := g.GetAll(ctx, fmt.Sprintf("/drives/%s%s/delta", d.DriveID, itemRef(root)), url.Values{
-		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl,deleted"},
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl,parentReference,deleted"},
 	})
 	if err != nil {
 		return nil, err
@@ -510,24 +515,26 @@ func (d *Drive) subtree(ctx context.Context, g *graphauth.GraphClient, root stri
 		}
 		latest[j.ID] = j
 	}
-	rootSegs := urlPathSegments(root)
-	children := map[string][]Item{}
+	byParent := map[string][]Item{}
 	for _, id := range order {
 		j := latest[id]
-		if j.Deleted != nil {
+		if j.Deleted != nil || j.ParentReference == nil {
 			continue
 		}
-		p, ok := libraryPath(libURL, j.WebURL)
-		if !ok {
-			continue
-		}
-		segs := urlPathSegments(p)
-		if len(segs) <= len(rootSegs) || !segsHasPrefix(segs, rootSegs) {
-			continue
-		}
-		parent := strings.ToLower(strings.Join(segs[:len(segs)-1], "/"))
-		children[parent] = append(children[parent], j.toItem())
+		byParent[j.ParentReference.ID] = append(byParent[j.ParentReference.ID], j.toItem())
 	}
+	children := map[string][]Item{}
+	var place func(id, dir string)
+	place = func(id, dir string) {
+		items := byParent[id]
+		children[strings.ToLower(dir)] = items
+		for _, it := range items {
+			if it.IsFolder {
+				place(it.ID, path.Join(dir, it.Name))
+			}
+		}
+	}
+	place(rootItem.ID, root)
 	return children, nil
 }
 

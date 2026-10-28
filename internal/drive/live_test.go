@@ -165,7 +165,7 @@ func TestLiveWalk(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, p := range []string{folder + "/top.txt", folder + "/a/b/deep.txt", folder + "/Mixed Case/x #1.txt"} {
+	for _, p := range []string{folder + "/top.txt", folder + "/a/b/data.csv", folder + "/a/b/deep.txt", folder + "/Mixed Case/x #1.txt"} {
 		if _, err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader([]byte("x")), 1); err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func TestLiveWalk(t *testing.T) {
 		return seen
 	}
 
-	want := []string{"1:a:false", "2:b:true", "3:deep.txt:true", "1:Mixed Case:false", "2:x #1.txt:true", "1:top.txt:true"}
+	want := []string{"1:a:false", "2:b:true", "3:data.csv:false", "3:deep.txt:true", "1:Mixed Case:false", "2:x #1.txt:true", "1:top.txt:true"}
 	byDelta := walk(folder, 0, false)
 	if fmt.Sprint(byDelta) != fmt.Sprint(want) {
 		t.Errorf("delta walk visited %v, want %v", byDelta, want)
