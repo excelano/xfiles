@@ -12,6 +12,7 @@ package drive
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -99,8 +100,8 @@ func parseSiteURL(rawURL string) (hostname, sitePath, restPath string, err error
 
 // ResolveDrive resolves a SharePoint URL to a Graph drive. Library selection
 // follows three rules, in order: an explicit library name wins; otherwise a URL
-// that points below the site is matched to a library by webUrl (with any folder
-// remainder kept as the starting path); otherwise the site's default document
+// that points below the site is resolved to its library, with the folder or file
+// it names kept as the starting path; otherwise the site's default document
 // library ("Documents"/"Shared Documents") is bound.
 func ResolveDrive(ctx context.Context, g *graphauth.GraphClient, siteURL, library string) (*Drive, error) {
 	hostname, sitePath, restPath, err := parseSiteURL(siteURL)
@@ -221,8 +222,10 @@ func resolveDriveByName(ctx context.Context, g *graphauth.GraphClient, siteID, l
 }
 
 // resolveDriveFromURL matches the library whose webUrl the URL points into and
-// returns the folder remainder as the starting path. When no library matches
-// (an unusual URL shape), it falls back to the site's default library.
+// returns the folder remainder as the starting path. A URL that names no
+// library by its path, such as the _layouts/15/Doc.aspx link of a file open in
+// Office for the web, is resolved through the shares endpoint to the item it
+// opens. A URL neither can place is an error rather than a guess.
 func resolveDriveFromURL(ctx context.Context, g *graphauth.GraphClient, siteID, rawURL string) (id, name, startPath string, err error) {
 	drives, err := listDrives(ctx, g, siteID)
 	if err != nil {
@@ -231,8 +234,32 @@ func resolveDriveFromURL(ctx context.Context, g *graphauth.GraphClient, siteID, 
 	if m, sp, ok := matchDriveByURL(rawURL, drives); ok {
 		return m.ID, m.Name, sp, nil
 	}
-	id, name, err = resolveDefaultDrive(ctx, g, siteID)
-	return id, name, "", err
+	share := "u!" + base64.RawURLEncoding.EncodeToString([]byte(rawURL))
+	body, err := g.Get(ctx, "/shares/"+share+"/driveItem", url.Values{"$select": {"name,root,parentReference"}})
+	if err != nil {
+		return "", "", "", fmt.Errorf("%s names no library, folder or file on the site (%v)", rawURL, err)
+	}
+	var it struct {
+		Name            string    `json:"name"`
+		Root            *struct{} `json:"root"`
+		ParentReference struct {
+			DriveID string `json:"driveId"`
+			Path    string `json:"path"`
+		} `json:"parentReference"`
+	}
+	if err := json.Unmarshal(body, &it); err != nil {
+		return "", "", "", fmt.Errorf("decoding shared item: %w", err)
+	}
+	for _, d := range drives {
+		if d.ID != it.ParentReference.DriveID {
+			continue
+		}
+		if it.Root != nil {
+			return d.ID, d.Name, "", nil
+		}
+		return d.ID, d.Name, pathUnder(it.ParentReference.Path, it.Name), nil
+	}
+	return "", "", "", fmt.Errorf("%s opens an item outside this site's libraries", rawURL)
 }
 
 // matchDriveByURL picks the drive whose webUrl is the longest path-prefix of
@@ -568,8 +595,9 @@ type SearchHit struct {
 // folder root whose name, content, or metadata match query. The index trails
 // uploads, so a recently added file can be missing, and the result is what the
 // index returns rather than a complete listing. Each hit's path is derived from
-// its webUrl, and hits outside root are dropped, so the scope holds whatever
-// the service does with the folder in the request.
+// its webUrl, or, for a file whose webUrl is an Office for the web link, from
+// its parent folder's path. Hits outside root are dropped, so the scope holds
+// whatever the service does with the folder in the request.
 func (d *Drive) Search(ctx context.Context, g *graphauth.GraphClient, root, query string) ([]SearchHit, error) {
 	libURL, err := d.libraryURL(ctx, g)
 	if err != nil {
@@ -578,12 +606,13 @@ func (d *Drive) Search(ctx context.Context, g *graphauth.GraphClient, root, quer
 
 	q := url.PathEscape(strings.ReplaceAll(query, "'", "''"))
 	raws, err := g.GetAll(ctx, fmt.Sprintf("/drives/%s%s/search(q='%s')", d.DriveID, itemRef(root), q), url.Values{
-		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl"},
+		"$select": {"id,name,size,lastModifiedDateTime,folder,file,fileSystemInfo,webUrl,parentReference"},
 	})
 	if err != nil {
 		return nil, err
 	}
 	rootSegs := urlPathSegments(root)
+	folders := map[string]string{}
 	var hits []SearchHit
 	for _, raw := range raws {
 		var j driveItemJSON
@@ -591,6 +620,16 @@ func (d *Drive) Search(ctx context.Context, g *graphauth.GraphClient, root, quer
 			return nil, fmt.Errorf("decoding search result: %w", err)
 		}
 		p, ok := libraryPath(libURL, j.WebURL)
+		if !ok && j.ParentReference != nil {
+			parent, seen := folders[j.ParentReference.ID]
+			if !seen {
+				if parent, err = d.folderPath(ctx, g, j.ParentReference.ID); err != nil {
+					return nil, err
+				}
+				folders[j.ParentReference.ID] = parent
+			}
+			p, ok = path.Join(parent, j.Name), true
+		}
 		if !ok {
 			continue
 		}
@@ -601,6 +640,38 @@ func (d *Drive) Search(ctx context.Context, g *graphauth.GraphClient, root, quer
 		hits = append(hits, SearchHit{Item: j.toItem(), Path: p})
 	}
 	return hits, nil
+}
+
+// folderPath returns the library-relative path of the folder with the given id,
+// "" for the library root.
+func (d *Drive) folderPath(ctx context.Context, g *graphauth.GraphClient, id string) (string, error) {
+	body, err := g.Get(ctx, fmt.Sprintf("/drives/%s/items/%s", d.DriveID, id), url.Values{
+		"$select": {"name,root,parentReference"},
+	})
+	if err != nil {
+		return "", err
+	}
+	var f struct {
+		Name            string    `json:"name"`
+		Root            *struct{} `json:"root"`
+		ParentReference struct {
+			Path string `json:"path"`
+		} `json:"parentReference"`
+	}
+	if err := json.Unmarshal(body, &f); err != nil {
+		return "", fmt.Errorf("decoding folder: %w", err)
+	}
+	if f.Root != nil {
+		return "", nil
+	}
+	return pathUnder(f.ParentReference.Path, f.Name), nil
+}
+
+// pathUnder joins name onto a Graph parentReference.path such as
+// /drives/{id}/root:/a/b, giving the library-relative path a/b/name.
+func pathUnder(parentRef, name string) string {
+	_, parent, _ := strings.Cut(parentRef, "root:")
+	return strings.Trim(path.Join(parent, name), "/")
 }
 
 // libraryPath turns an item's webUrl into its path relative to the library at

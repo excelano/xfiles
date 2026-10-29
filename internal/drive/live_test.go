@@ -22,6 +22,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -253,6 +255,48 @@ func TestLiveResolveDriveVariants(t *testing.T) {
 	if byURL.StartPath != folder {
 		t.Errorf("by URL StartPath = %q, want %q", byURL.StartPath, folder)
 	}
+
+	// A csv opens in Office for the web, so its webUrl is a Doc.aspx link that
+	// names no folder; it must bind the file, not the library root.
+	csv, err := byDefault.Upload(ctx, g, folder+"/sheet.csv", "text/csv", bytes.NewReader([]byte("x\n")), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(csv.WebURL, "Doc.aspx") {
+		t.Logf("csv webUrl is no longer a Doc.aspx link: %s", csv.WebURL)
+	}
+	byLink, err := ResolveDrive(ctx, g, csv.WebURL, "")
+	if err != nil {
+		t.Fatalf("ResolveDrive by file link: %v", err)
+	}
+	if byLink.DriveID != byDefault.DriveID || byLink.StartPath != folder+"/sheet.csv" {
+		t.Errorf("by file link bound (%s, %q), want (%s, %q)", byLink.DriveID, byLink.StartPath, byDefault.DriveID, folder+"/sheet.csv")
+	}
+	if d, err := ResolveDrive(ctx, g, site+"/_layouts/15/no-such-page.aspx", ""); err == nil {
+		t.Errorf("an unresolvable URL bound (%s, %q) instead of failing", d.DriveID, d.StartPath)
+	}
+}
+
+// folderPath places a search hit whose webUrl names no folder, so it has to
+// rebuild a path that survives spaces, # and % in a name, and the library root.
+func TestLiveFolderPath(t *testing.T) {
+	ctx, g, d := liveDrive(t)
+	folder := fixtureFolder(t, ctx, g, d)
+	odd := folder + "/Mixed Case #1 50%"
+	for _, p := range []string{odd, odd + "/inner"} {
+		if err := d.Mkdir(ctx, g, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range []string{"", folder, odd + "/inner"} {
+		it, err := d.Stat(ctx, g, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, err := d.folderPath(ctx, g, it.ID); err != nil || got != p {
+			t.Errorf("folderPath of /%s = (%q, %v)", p, got, err)
+		}
+	}
 }
 
 // searchFixture is the folder the search test keeps permanently, and
@@ -262,28 +306,39 @@ const (
 	searchTerm    = "xfilessearchfixture"
 )
 
-// Search against a fixture that outlives the run: a hit inside the searched
-// folder and a hit outside it, both carrying the same word in their contents
+// Search against a fixture that outlives the run: hits inside the searched
+// folder and a hit outside it, all carrying the same word in their contents
 // only. The first run creates the fixture and skips, since the index cannot see
 // it yet; a later run must find the inside hit and not the outside one.
 func TestLiveSearch(t *testing.T) {
 	ctx, g, d := liveDrive(t)
-	inside, outside := searchFixture+"/Inside/hit.txt", searchFixture+"/Outside/hit.txt"
+	// hit.csv carries an Office for the web webUrl, which names no folder.
+	inside := []string{searchFixture + "/Inside/hit.csv", searchFixture + "/Inside/hit.txt"}
+	outside := searchFixture + "/Outside/hit.txt"
 
-	item, err := d.Stat(ctx, g, inside)
-	if err != nil {
-		for _, p := range []string{searchFixture, searchFixture + "/Inside", searchFixture + "/Outside"} {
-			if err := d.MkdirIfMissing(ctx, g, p); err != nil {
+	var newest time.Time
+	var created []string
+	body := []byte("This file exists for the xfiles search test: " + searchTerm + "\n")
+	for _, p := range append(inside, outside) {
+		item, err := d.Stat(ctx, g, p)
+		if err == nil {
+			if item.LastModified.After(newest) {
+				newest = item.LastModified
+			}
+			continue
+		}
+		for _, dir := range []string{searchFixture, path.Dir(p)} {
+			if err := d.MkdirIfMissing(ctx, g, dir); err != nil {
 				t.Fatal(err)
 			}
 		}
-		body := []byte("This file exists for the xfiles search test: " + searchTerm + "\n")
-		for _, p := range []string{inside, outside} {
-			if _, err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader(body), int64(len(body))); err != nil {
-				t.Fatal(err)
-			}
+		if _, err := d.Upload(ctx, g, p, "text/plain", bytes.NewReader(body), int64(len(body))); err != nil {
+			t.Fatal(err)
 		}
-		t.Skipf("created /%s; the search index can take hours to see it, so rerun the live tests later", searchFixture)
+		created = append(created, p)
+	}
+	if len(created) > 0 {
+		t.Skipf("created %v; the search index can take hours to see it, so rerun the live tests later", created)
 	}
 
 	hits, err := d.Search(ctx, g, searchFixture+"/Inside", searchTerm)
@@ -294,13 +349,16 @@ func TestLiveSearch(t *testing.T) {
 	for _, h := range hits {
 		paths = append(paths, h.Path)
 	}
-	if len(paths) == 0 && time.Since(item.LastModified) < 24*time.Hour {
-		t.Skipf("/%s was created %s ago and is not indexed yet; rerun later", searchFixture, time.Since(item.LastModified).Round(time.Minute))
+	sort.Strings(paths)
+	if len(paths) < len(inside) && time.Since(newest) < 24*time.Hour {
+		t.Skipf("/%s changed %s ago and is not fully indexed yet; rerun later", searchFixture, time.Since(newest).Round(time.Minute))
 	}
-	if fmt.Sprint(paths) != fmt.Sprint([]string{inside}) {
-		t.Errorf("Search of /%s/Inside returned %v, want [%s]", searchFixture, paths, inside)
+	if fmt.Sprint(paths) != fmt.Sprint(inside) {
+		t.Errorf("Search of /%s/Inside returned %v, want %v", searchFixture, paths, inside)
 	}
-	if len(hits) == 1 && hits[0].WebURL == "" {
-		t.Error("search hit carries no webUrl")
+	for _, h := range hits {
+		if h.WebURL == "" {
+			t.Errorf("search hit %s carries no webUrl", h.Path)
+		}
 	}
 }

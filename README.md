@@ -74,7 +74,7 @@ https://contoso-my.sharepoint.com/personal/ann_contoso_com/Documents/Reports
 
 Wrap the URL in single quotes if it contains `?` or `&`, which the "Copy link" button's URLs always do — otherwise the shell splits the command on the `&` before the tool ever sees it. A plain site or folder URL like the ones above needs no quoting.
 
-The library is worked out from the URL. A bare site URL binds the site's default document library. A URL that points into a specific library binds that one, and where it points at a folder within the library, the tool starts there. To force a particular library regardless of the URL, name it by its display name with `--library`, which every tool accepts:
+The library is worked out from the URL. A bare site URL binds the site's default document library. A URL that points into a specific library binds that one, and where it points at a folder within the library, the tool starts there. A URL that opens a file binds that file, including the address of a document open in Excel or Word for the web, which names no folder. A URL that names nothing on the site is an error. To force a particular library regardless of the URL, name it by its display name with `--library`, which every tool accepts:
 
 ```
 xftp --library "Project Files" https://contoso.sharepoint.com/sites/Marketing

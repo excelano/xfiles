@@ -129,6 +129,17 @@ func TestSplitPath(t *testing.T) {
 	}
 }
 
+func TestPathUnder(t *testing.T) {
+	for _, c := range []struct{ parent, name, want string }{
+		{"/drives/b!x/root:", "a.csv", "a.csv"},
+		{"/drives/b!x/root:/Mixed Case #1 50%/inner", "a.csv", "Mixed Case #1 50%/inner/a.csv"},
+	} {
+		if got := pathUnder(c.parent, c.name); got != c.want {
+			t.Errorf("pathUnder(%q, %q) = %q, want %q", c.parent, c.name, got, c.want)
+		}
+	}
+}
+
 func TestLibraryPath(t *testing.T) {
 	lib, _ := url.Parse("https://c.sharepoint.com/sites/Marketing/Shared%20Documents")
 	cases := []struct {
