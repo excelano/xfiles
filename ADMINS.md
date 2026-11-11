@@ -1,12 +1,12 @@
-# xftp for IT administrators
+# xfiles for IT administrators
 
-This page is for the person who approves applications in a Microsoft 365 tenant. If a colleague has asked you to allow xftp, everything you need to make that decision is below.
+This page is for the person who approves applications in a Microsoft 365 tenant. If a colleague has asked you to allow one of the xfiles tools, everything you need to make that decision is below.
 
-xftp is a command-line tool that gives a SharePoint document library the feel of an FTP session. It runs locally on the user's own machine, signs in as that user through Microsoft's device-code flow, and talks to SharePoint over the Microsoft Graph API. There is no server, no daemon, no background process, and no service account. It can do nothing the signed-in user could not already do in SharePoint Online through a browser. The other xfiles commands, and the SharePoint backend of the sibling tool [xql](https://github.com/excelano/xql), use the identical application registration and the identical delegated permission, so a single consent decision covers them all. Everything on this page applies equally to each of them.
+The xfiles tools are command-line programs that give a SharePoint document library the feel of the Unix file utilities: an FTP-style session, one-shot copies, a recursive mirror and recursive listings. Each runs locally on the user's own machine, signs in as that user through Microsoft's device-code flow, and talks to SharePoint over the Microsoft Graph API. There is no server, no daemon, no background process, and no service account. None of them can do anything the signed-in user could not already do in SharePoint Online through a browser. They and the SharePoint backend of the sibling tool [xql](https://github.com/excelano/xql) use one application registration and one delegated permission, so a single consent decision covers them all.
 
 ## The application you would be approving
 
-xftp authenticates through a multi-tenant Microsoft Entra application published in Excelano's tenant. Match it on the Application (client) ID rather than the display name, since the ID is the value that cannot be spoofed.
+The tools authenticate through a multi-tenant Microsoft Entra application published in Excelano's tenant. Match it on the Application (client) ID rather than the display name, since the ID is the value that cannot be spoofed.
 
 | Property | Value |
 |---|---|
@@ -22,19 +22,19 @@ Excelano LLC is a Microsoft-verified publisher, so the consent screen and the en
 
 ## What the delegated permission means
 
-The permission is delegated, not application. That distinction is the whole risk profile. A delegated permission only ever acts on behalf of the user who signed in, and only for the duration of their token. xftp cannot read or write any site, library, or file that the user could not already reach themselves, and it has no standalone or unattended access — nothing happens unless that specific person has run the tool and signed in. There is no client secret embedded in the tool and no app-only token path, so the registration cannot be used for background data access.
+The permission is delegated, not application, and that sets the risk profile. A delegated permission only ever acts on behalf of the user who signed in, and only for the duration of their token. The tools cannot read or write any site, library, or file that the user could not already reach themselves, and they have no standalone or unattended access — nothing happens unless that specific person has run the tool and signed in. There is no client secret embedded in the tools and no app-only token path, so the registration cannot be used for background data access.
 
-`Sites.ReadWrite.All` is the narrowest single Graph scope that allows both browsing folder metadata and transferring file contents across the SharePoint sites the user can access. xftp requests no other scopes and calls no Graph endpoints beyond the bound library's drive.
+`Sites.ReadWrite.All` is the narrowest single Graph scope that allows both browsing folder metadata and transferring file contents across the SharePoint sites the user can access. The tools request no other Graph permission and call no Graph endpoints beyond the bound library's drive; the sign-in itself carries the standard OpenID Connect scopes (`openid`, `profile`, `offline_access`) that every Microsoft sign-in requests.
 
 ## Whether you need to do anything
 
-By default this scope is user-consentable, so in many tenants the first person to run xftp simply clears a one-time consent prompt themselves and no administrator action is required. You only need to step in if your tenant restricts user consent — for example if user consent is turned off entirely, or limited to permissions classified as low impact. In that case the user will see a "needs admin approval" message instead of a consent screen, and one of the two paths below grants approval for everyone.
+By default this scope is user-consentable, so in many tenants the first person to run one of the tools clears a one-time consent prompt themselves and no administrator action is required. You only need to step in if your tenant restricts user consent — for example if user consent is turned off entirely, or limited to permissions classified as low impact. In that case the user will see a "needs admin approval" message instead of a consent screen, and one of the two paths below grants approval for everyone.
 
 ## Granting consent through the Entra admin center
 
 This path lets you read the exact permission on screen before you accept it.
 
-1. Have the user run xftp once and start the sign-in. The first device-code attempt registers the application in your tenant as an enterprise application, even when consent is then blocked, which is what makes it findable in the next step.
+1. Have the user run one of the tools once and start the sign-in. The first device-code attempt registers the application in your tenant as an enterprise application, even when consent is then blocked, which is what makes it findable in the next step.
 2. Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com) as a Global Administrator, Privileged Role Administrator, Cloud Application Administrator, or Application Administrator.
 3. Go to Identity, then Applications, then Enterprise applications, and search for the Application ID `13be0775-ed76-4407-bb2c-b7a07a189bf6`.
 4. Open Permissions and choose "Grant admin consent for *your organization*". Review the single delegated permission, Microsoft Graph `Sites.ReadWrite.All`, and accept.
@@ -49,11 +49,11 @@ As a one-step alternative that both registers the application and grants tenant-
 https://login.microsoftonline.com/common/adminconsent?client_id=13be0775-ed76-4407-bb2c-b7a07a189bf6
 ```
 
-Because xftp is a public client with no web reply URL, the browser may land on a blank or error page after you accept. The consent is still recorded; the error is only the post-consent redirect having nowhere to return to.
+Because the application is a public client with no web reply URL, the browser may land on a blank or error page after you accept. The consent is still recorded; the error is only the post-consent redirect having nowhere to return to.
 
 ## Limiting who can use it
 
-If you want xftp available to some people but not the whole tenant, open the enterprise application's Properties, set "Assignment required" to Yes, and then add the specific users or groups under Users and groups. Anyone not assigned is refused at sign-in. Conditional Access policies that target the application apply as they would to any other enterprise app.
+If you want the tools available to some people but not the whole tenant, open the enterprise application's Properties, set "Assignment required" to Yes, and then add the specific users or groups under Users and groups. Anyone not assigned is refused at sign-in. Conditional Access policies that target the application apply as they would to any other enterprise app.
 
 ## Reviewing and revoking
 

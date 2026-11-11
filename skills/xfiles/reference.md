@@ -49,7 +49,7 @@ quoted (`"Phase 2"`, `'Phase 2'`) or escaped (`Phase\ 2`) as in a shell.
 | `cd [path]` | change remote folder; **no arg prints the current folder** |
 | `pwd` | print the current remote folder |
 | `get <remote> [local]` | download; local name defaults to the remote's |
-| `put <local> [remote]` | upload; remote name defaults to the local's; >250 MB chunks with progress |
+| `put <local> [remote]` | upload; remote name defaults to the local's; see Transfers and large files for chunking and progress |
 | `mkdir <path>` | create a remote folder |
 | `rm [-r] <path>` (alias `delete`) | delete a file (→ recycle bin); a **folder** asks first, or goes straight through with `-r` |
 | `mv <src> <dst>` (alias `rename`) | move or rename a remote item |
@@ -196,7 +196,7 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
   file at the real name.
 - Either direction reads/writes directly to disk, so transfer size is bounded by quota
   and local disk, **not RAM**.
-- Transfers over **50 MB** print a progress line. **Ctrl-C** cleans up: a partial
+- Transfers over **50 MiB** print a progress line. **Ctrl-C** cleans up: a partial
   download is discarded and an aborted upload session is cancelled server-side.
 
 ## The boundary

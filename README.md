@@ -18,7 +18,7 @@ Every install line below ends with `xcp --install-skill`. That installs the [Cla
 
 ### Debian and Ubuntu
 
-Add the [Excelano apt repository](https://excelano.com/apt/) once (one-time setup):
+Add the [Excelano apt repository](https://excelano.com/apt/) once:
 
 ```sh
 curl -fsSL https://excelano.com/apt/setup.sh | sudo sh
@@ -34,7 +34,7 @@ sudo apt install xfiles && xcp --install-skill
 
 ### Homebrew
 
-On macOS or Linux, tap and trust the repository once — Homebrew gates third-party taps behind explicit trust (one-time setup):
+On macOS or Linux, tap and trust the repository once, since Homebrew gates third-party taps behind explicit trust:
 
 ```sh
 brew tap excelano/tap
@@ -47,19 +47,21 @@ There's no metapackage, so name the tools you want. `brew upgrade` keeps them cu
 brew install xftp xcp xsync xfind xtree && xcp --install-skill
 ```
 
+### Windows
+
+With [WinGet](https://learn.microsoft.com/windows/package-manager/), so `winget upgrade` keeps them current. Each tool is its own package (`Excelano.xcp`, `Excelano.xsync` and so on), so name the ones you want:
+
+```powershell
+winget install Excelano.xcp
+xcp --install-skill
+```
+
 ### Go
 
-From source, with a Go toolchain — `go.mod` names the version it needs, and Go fetches that toolchain automatically if yours is older:
+From source, with a Go toolchain — `go.mod` names the version it needs, and Go fetches that toolchain automatically if yours is older. This installs every command in the repository:
 
 ```
-go install github.com/excelano/xfiles/cmd/xftp@latest
-go install github.com/excelano/xfiles/cmd/xcp@latest
-go install github.com/excelano/xfiles/cmd/xsync@latest
-go install github.com/excelano/xfiles/cmd/xfind@latest
-go install github.com/excelano/xfiles/cmd/xtree@latest
-
-# any one of them installs the shared Claude Code skill
-xcp --install-skill
+go install github.com/excelano/xfiles/cmd/...@latest && xcp --install-skill
 ```
 
 ## Pointing at a library
@@ -194,9 +196,7 @@ The sign-in layer lives in its own module, [graphauth](https://github.com/excela
 
 ## Large files and transfers
 
-Files up to 250 MB upload in a single request. Above that, the transfer opens a Graph upload session and streams the file in 10 MiB chunks. Downloads stream straight to disk as well, into a temporary file that's renamed into place only once the transfer completes, so an interrupted download never leaves a corrupt file at the real name. Either direction reads or writes directly to disk rather than buffering the whole file in memory, so transfer size is bounded by the library's quota and your local disk, not by RAM.
-
-Transfers over 50 MB print a progress line. Ctrl-C interrupts a transfer in progress and cleans up after itself: a partial download is discarded, and an aborted upload session is cancelled on the server.
+Transfers stream between disk and SharePoint rather than through memory, so their size is bounded by the library's quota and your local disk, not by RAM. A download lands in a temporary file that is renamed into place only once it completes, and Ctrl-C cleans up after itself. The [reference](skills/xfiles/reference.md#transfers-and-large-files) has the thresholds and the cleanup rules.
 
 ## Use it from Claude Code
 
@@ -208,14 +208,16 @@ xcp --install-skill
 
 That writes `~/.claude/skills/xfiles/` and stamps in the skill's revision, which `xcp -V` also prints, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
-The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, or a build from source.
+The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, WinGet, or a build from source.
 
 ## Building
 
 ```
-go build -o xftp ./cmd/xftp
-go build -o xcp ./cmd/xcp
-go build -o xsync ./cmd/xsync
-go build -o xfind ./cmd/xfind
-go build -o xtree ./cmd/xtree
+go build -o bin/ ./cmd/...
 ```
+
+The binaries land in `bin/`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
