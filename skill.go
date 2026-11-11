@@ -16,9 +16,9 @@ package xfiles
 //
 // The skill is compiled into the binary rather than shipped as a package data
 // file, because the binary is the only artifact present on every install path.
-// apt, winget, `go install`, the curl one-liner, a prebuilt GitHub
-// binary and a source build all produce the binary; `go install` in particular
-// ships no data files at all. Embedding is what makes one instruction —
+// apt, winget, `go install`, the GitHub release archives and a source build
+// all produce the binary; `go install` in particular ships no data files at
+// all. Embedding is what makes one instruction —
 // `xcp --install-skill` — true everywhere.
 //
 // The contract this implements is fleet-wide and pinned in
