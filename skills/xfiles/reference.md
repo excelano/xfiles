@@ -197,7 +197,7 @@ Prints the walk as an indented tree with `├──`/`└──` guides, then an
 - Either direction reads/writes directly to disk, so transfer size is bounded by quota
   and local disk, **not RAM**.
 - Transfers over **50 MiB** print a progress line. **Ctrl-C** cleans up: a partial
-  download is discarded and an aborted upload session is cancelled server-side.
+  download is discarded and an aborted upload session is canceled server-side.
 
 ## The boundary
 
