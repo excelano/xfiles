@@ -32,21 +32,6 @@ sudo apt install xfiles && xcp --install-skill
 
 `xfiles` is a metapackage that pulls in the whole suite. To install just one, name it instead — `sudo apt install xsync`, for example.
 
-### Homebrew
-
-On macOS or Linux, tap and trust the repository once, since Homebrew gates third-party taps behind explicit trust:
-
-```sh
-brew tap excelano/tap
-brew trust excelano/tap
-```
-
-There's no metapackage, so name the tools you want. `brew upgrade` keeps them current:
-
-```sh
-brew install xftp xcp xsync xfind xtree && xcp --install-skill
-```
-
 ### Windows
 
 With [WinGet](https://learn.microsoft.com/windows/package-manager/), so `winget upgrade` keeps them current. Each tool is its own package (`Excelano.xcp`, `Excelano.xsync` and so on), so name the ones you want:
@@ -208,7 +193,7 @@ xcp --install-skill
 
 That writes `~/.claude/skills/xfiles/` and stamps in the skill's revision, which `xcp -V` also prints, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `--uninstall-skill` on the same command removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
-The skill is compiled into the binary, so this works the same however you installed xfiles — apt, Homebrew, WinGet, or a build from source.
+The skill is compiled into the binary, so this works the same however you installed xfiles — apt, WinGet, or a build from source.
 
 ## Building
 

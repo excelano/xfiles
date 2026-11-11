@@ -1,3 +1,6 @@
+# Author: David M. Anderson
+# Built with AI assistance (Claude, Anthropic)
+#
 # goreleaser configuration, run by build-release (excelano/shipping) from a
 # tagged commit. To test locally (optional):
 #   goreleaser release --snapshot --clean
@@ -274,85 +277,3 @@ checksum:
 release:
   draft: false
   prerelease: auto
-
-brews:
-  - name: xftp
-    ids:
-      - xftp
-    repository:
-      owner: excelano
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://excelano.com/xftp/"
-    description: "FTP-style interactive client for SharePoint document libraries"
-    license: "MIT"
-    install: |
-      bin.install "xftp"
-    test: |
-      system "#{bin}/xftp", "--version"
-  - name: xcp
-    ids:
-      - xcp
-    repository:
-      owner: excelano
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://excelano.com/xftp/"
-    description: "Copy files to and from SharePoint document libraries, like cp"
-    license: "MIT"
-    install: |
-      bin.install "xcp"
-    test: |
-      system "#{bin}/xcp", "--version"
-  - name: xfind
-    ids:
-      - xfind
-    repository:
-      owner: excelano
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://excelano.com/xftp/"
-    description: "Find files in SharePoint document libraries, like find"
-    license: "MIT"
-    install: |
-      bin.install "xfind"
-    test: |
-      system "#{bin}/xfind", "--version"
-  - name: xtree
-    ids:
-      - xtree
-    repository:
-      owner: excelano
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://excelano.com/xftp/"
-    description: "Show SharePoint document libraries as a tree, like tree"
-    license: "MIT"
-    install: |
-      bin.install "xtree"
-    test: |
-      system "#{bin}/xtree", "--version"
-  - name: xsync
-    ids:
-      - xsync
-    repository:
-      owner: excelano
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://excelano.com/xftp/"
-    description: "Sync local directories with SharePoint document libraries"
-    license: "MIT"
-    install: |
-      bin.install "xsync"
-    test: |
-      system "#{bin}/xsync", "--version"
